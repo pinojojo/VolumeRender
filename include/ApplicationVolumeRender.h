@@ -30,13 +30,17 @@
 #include <Hawk/Components/Camera.hpp>
 #include <Hawk/Math/Functions.hpp>
 
-class ApplicationVolumeRender final : public Application {
+class ApplicationVolumeRender final : public Application
+{
 public:
     using Base = Application;
 
-    ApplicationVolumeRender(ApplicationDesc const& desc);
+    ApplicationVolumeRender(ApplicationDesc const &desc);
+
 private:
     void InitializeVolumeTexture();
+
+    void UpdateVolumeTexture(const std::vector<uint16_t> &intensity, int width, int height, int depth);
 
     void InitializeTransferFunction();
 
@@ -67,13 +71,13 @@ private:
     void TextureBlit(DX::ComPtr<ID3D11ShaderResourceView> pSrc, DX::ComPtr<ID3D11RenderTargetView> pDst);
 
 private:
-    using D3D11ArrayUnorderedAccessView = std::vector< DX::ComPtr<ID3D11UnorderedAccessView>>;
-    using D3D11ArrayShadeResourceView = std::vector< DX::ComPtr<ID3D11ShaderResourceView>>;
+    using D3D11ArrayUnorderedAccessView = std::vector<DX::ComPtr<ID3D11UnorderedAccessView>>;
+    using D3D11ArrayShadeResourceView = std::vector<DX::ComPtr<ID3D11ShaderResourceView>>;
 
-    D3D11ArrayShadeResourceView   m_pSRVVolumeIntensity;
+    D3D11ArrayShadeResourceView m_pSRVVolumeIntensity;
     D3D11ArrayUnorderedAccessView m_pUAVVolumeIntensity;
 
-    DX::ComPtr<ID3D11ShaderResourceView>  m_pSRVGradient;
+    DX::ComPtr<ID3D11ShaderResourceView> m_pSRVGradient;
     DX::ComPtr<ID3D11UnorderedAccessView> m_pUAVGradient;
 
     DX::ComPtr<ID3D11ShaderResourceView> m_pSRVDiffuseTF;
@@ -82,14 +86,14 @@ private:
     DX::ComPtr<ID3D11ShaderResourceView> m_pSRVOpacityTF;
     DX::ComPtr<ID3D11ShaderResourceView> m_pSRVEnvironment;
 
-    DX::ComPtr<ID3D11ShaderResourceView>  m_pSRVRadiance;
+    DX::ComPtr<ID3D11ShaderResourceView> m_pSRVRadiance;
     DX::ComPtr<ID3D11UnorderedAccessView> m_pUAVRadiance;
 
-    DX::ComPtr<ID3D11ShaderResourceView>  m_pSRVDiffuse;
-    DX::ComPtr<ID3D11ShaderResourceView>  m_pSRVSpecular;
-    DX::ComPtr<ID3D11ShaderResourceView>  m_pSRVNormal;
-    DX::ComPtr<ID3D11ShaderResourceView>  m_pSRVDepth;
-    DX::ComPtr<ID3D11ShaderResourceView>  m_pSRVColorSum;
+    DX::ComPtr<ID3D11ShaderResourceView> m_pSRVDiffuse;
+    DX::ComPtr<ID3D11ShaderResourceView> m_pSRVSpecular;
+    DX::ComPtr<ID3D11ShaderResourceView> m_pSRVNormal;
+    DX::ComPtr<ID3D11ShaderResourceView> m_pSRVDepth;
+    DX::ComPtr<ID3D11ShaderResourceView> m_pSRVColorSum;
 
     DX::ComPtr<ID3D11UnorderedAccessView> m_pUAVDiffuse;
     DX::ComPtr<ID3D11UnorderedAccessView> m_pUAVSpecular;
@@ -97,10 +101,10 @@ private:
     DX::ComPtr<ID3D11UnorderedAccessView> m_pUAVDepth;
     DX::ComPtr<ID3D11UnorderedAccessView> m_pUAVColorSum;
 
-    DX::ComPtr<ID3D11ShaderResourceView>  m_pSRVToneMap;
+    DX::ComPtr<ID3D11ShaderResourceView> m_pSRVToneMap;
     DX::ComPtr<ID3D11UnorderedAccessView> m_pUAVToneMap;
 
-    DX::ComPtr<ID3D11ShaderResourceView>  m_pSRVDispersionTiles;
+    DX::ComPtr<ID3D11ShaderResourceView> m_pSRVDispersionTiles;
     DX::ComPtr<ID3D11UnorderedAccessView> m_pUAVDispersionTiles;
 
     DX::GraphicsPSO m_PSODefault = {};
@@ -110,24 +114,24 @@ private:
     DX::ComputePSO m_PSOGeneratePrimaryRays = {};
     DX::ComputePSO m_PSOComputeDiffuseLight = {};
 
-    DX::ComputePSO  m_PSOAccumulate = {};
-    DX::ComputePSO  m_PSOComputeTiles = {};
-    DX::ComputePSO  m_PSOResetTiles = {};
-    DX::ComputePSO  m_PSOToneMap = {};
-    DX::ComputePSO  m_PSOGenerateMipLevel = {};
-    DX::ComputePSO  m_PSOComputeGradient = {};
+    DX::ComputePSO m_PSOAccumulate = {};
+    DX::ComputePSO m_PSOComputeTiles = {};
+    DX::ComputePSO m_PSOResetTiles = {};
+    DX::ComputePSO m_PSOToneMap = {};
+    DX::ComputePSO m_PSOGenerateMipLevel = {};
+    DX::ComputePSO m_PSOComputeGradient = {};
 
-    DX::ComPtr<ID3D11SamplerState>  m_pSamplerPoint;
-    DX::ComPtr<ID3D11SamplerState>  m_pSamplerLinear;
-    DX::ComPtr<ID3D11SamplerState>  m_pSamplerAnisotropic;
+    DX::ComPtr<ID3D11SamplerState> m_pSamplerPoint;
+    DX::ComPtr<ID3D11SamplerState> m_pSamplerLinear;
+    DX::ComPtr<ID3D11SamplerState> m_pSamplerAnisotropic;
 
     DX::ComPtr<ID3D11Buffer> m_pConstantBufferFrame;
     DX::ComPtr<ID3D11Buffer> m_pDispatchIndirectBufferArgs;
     DX::ComPtr<ID3D11Buffer> m_pDrawInstancedIndirectBufferArgs;
 
-    ColorTransferFunction1D  m_DiffuseTransferFunc;
-    ColorTransferFunction1D  m_SpecularTransferFunc;
-    ColorTransferFunction1D  m_EmissionTransferFunc;
+    ColorTransferFunction1D m_DiffuseTransferFunc;
+    ColorTransferFunction1D m_SpecularTransferFunc;
+    ColorTransferFunction1D m_EmissionTransferFunc;
     ScalarTransferFunction1D m_RoughnessTransferFunc;
     ScalarTransferFunction1D m_OpacityTransferFunc;
 
@@ -136,21 +140,21 @@ private:
     Hawk::Math::Vec3 m_BoundingBoxMin = Hawk::Math::Vec3(-0.5f, -0.5f, -0.5f);
     Hawk::Math::Vec3 m_BoundingBoxMax = Hawk::Math::Vec3(+0.5f, +0.5f, +0.5f);
 
-    float    m_DeltaTime = 0.0f;
-    float    m_RotateSensitivity = 0.25f;
-    float    m_ZoomSensitivity = 1.5f;
-    float    m_Density = 100.0f;
-    float    m_Exposure = 12.0f;
-    float    m_Zoom = 1.0f;
+    float m_DeltaTime = 0.0f;
+    float m_RotateSensitivity = 0.25f;
+    float m_ZoomSensitivity = 1.5f;
+    float m_Density = 100.0f;
+    float m_Exposure = 12.0f;
+    float m_Zoom = 1.0f;
     uint32_t m_MipLevel = 0;
     uint32_t m_StepCount = 180;
     uint32_t m_FrameIndex = 0;
     uint32_t m_SampleDispersion = 8;
     uint32_t m_SamplingCount = 256;
 
-    bool     m_IsReloadShader = false;
-    bool     m_IsReloadTransferFunc = false;
-    bool     m_IsDrawDebugTiles = false;
+    bool m_IsReloadShader = false;
+    bool m_IsReloadTransferFunc = false;
+    bool m_IsDrawDebugTiles = false;
 
     uint16_t m_DimensionX = 0;
     uint16_t m_DimensionY = 0;
@@ -158,6 +162,6 @@ private:
     uint16_t m_DimensionMipLevels = 0;
 
     std::random_device m_RandomDevice;
-    std::mt19937       m_RandomGenerator;
+    std::mt19937 m_RandomGenerator;
     std::uniform_real_distribution<float> m_RandomDistribution;
 };

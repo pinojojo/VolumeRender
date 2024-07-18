@@ -25,18 +25,24 @@
 #include "ApplicationVolumeRender.h"
 
 #undef main
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[])
+{
 
-    try {
+    try
+    {
         auto appDesc = ApplicationDesc{};
-        appDesc.Width = 1280;
-        appDesc.Height = 720;
+
+        appDesc.Width = 1200;
+        appDesc.Height = 800;
+
         appDesc.Tittle = "Application VolumeRender <DX11>";
         appDesc.IsFullScreen = false;
 
         const auto pApplication = std::make_unique<ApplicationVolumeRender>(appDesc);
         pApplication->Run();
-    } catch (std::exception const& e) {
+    }
+    catch (std::exception const &e)
+    {
         std::cout << e.what() << std::endl;
         assert(0);
     }

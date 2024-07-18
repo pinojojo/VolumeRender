@@ -31,16 +31,24 @@
 #include <implot/implot.h>
 #include <fmt/printf.h>
 
+#include <wincodec.h> // WIC的头文件，用于保存图片
 
-Application::Application(ApplicationDesc const& desc)
-    : m_ApplicationDesc(desc) {
+#include <vector>
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
+
+Application::Application(ApplicationDesc const &desc)
+    : m_ApplicationDesc(desc)
+{
 
     this->InitializeSDL();
     this->InitializeD3D11();
     this->InitializeImGUI();
 }
 
-Application::~Application() {
+Application::~Application()
+{
 
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -58,7 +66,8 @@ void Application::Resize(int32_t width, int32_t height)
 
     m_pImmediateContext->OMSetRenderTargets(0, nullptr, nullptr);
 
-    for (uint32_t frameID = 0; frameID < FrameCount; frameID++) {
+    for (uint32_t frameID = 0; frameID < FrameCount; frameID++)
+    {
         m_pRTV[frameID].Reset();
         m_pD3D11BackBuffers[frameID].Reset();
         m_pD3D11BackBuffersDummy[frameID].Reset();
@@ -72,10 +81,11 @@ void Application::Resize(int32_t width, int32_t height)
     DX::ThrowIfFailed(m_pSwapChain->GetDesc1(&swapChainDesc));
     DX::ThrowIfFailed(m_pSwapChain->ResizeBuffers(FrameCount, width, height, swapChainDesc.Format, swapChainDesc.BufferUsage));
 
-    for (uint32_t frameID = 0; frameID < FrameCount; frameID++) {
+    for (uint32_t frameID = 0; frameID < FrameCount; frameID++)
+    {
         DX::ThrowIfFailed(m_pSwapChain->GetBuffer(frameID, IID_PPV_ARGS(&m_pD3D12BackBuffers[frameID])));
 
-        D3D11_RESOURCE_FLAGS d3d11Flags = { D3D11_BIND_RENDER_TARGET };
+        D3D11_RESOURCE_FLAGS d3d11Flags = {D3D11_BIND_RENDER_TARGET};
         DX::ThrowIfFailed(m_pD3D11On12Device->CreateWrappedResource(m_pD3D12BackBuffers[frameID].Get(), &d3d11Flags, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET, IID_PPV_ARGS(&m_pD3D11BackBuffersDummy[frameID])));
         DX::ThrowIfFailed(m_pD3D11On12Device->CreateWrappedResource(m_pD3D12BackBuffers[frameID].Get(), &d3d11Flags, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT, IID_PPV_ARGS(&m_pD3D11BackBuffers[frameID])));
 
@@ -89,7 +99,52 @@ void Application::Resize(int32_t width, int32_t height)
     m_ApplicationDesc.Height = height;
 }
 
-void Application::Run() {
+void SaveRenderTargetToPNG(ID3D11Device *m_pDevice, ID3D11DeviceContext *m_pImmediateContext, ID3D11RenderTargetView *m_pRTV, const char *filename)
+{
+    // 获取当前的渲染目标视图
+    ID3D11Texture2D *pRenderTarget = nullptr;
+    m_pRTV->GetResource(reinterpret_cast<ID3D11Resource **>(&pRenderTarget));
+
+    // 创建一个用于读取数据的临时纹理
+    D3D11_TEXTURE2D_DESC desc;
+    pRenderTarget->GetDesc(&desc);
+    desc.Usage = D3D11_USAGE_STAGING;
+    desc.BindFlags = 0;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    desc.MiscFlags = 0;
+
+    ID3D11Texture2D *pStagingTexture = nullptr;
+    m_pDevice->CreateTexture2D(&desc, nullptr, &pStagingTexture);
+
+    // 将渲染目标的内容复制到临时纹理
+    m_pImmediateContext->CopyResource(pStagingTexture, pRenderTarget);
+
+    // 映射临时纹理以读取数据
+    D3D11_MAPPED_SUBRESOURCE mappedResource;
+    m_pImmediateContext->Map(pStagingTexture, 0, D3D11_MAP_READ, 0, &mappedResource);
+
+    // 读取像素数据
+    BYTE *pData = reinterpret_cast<BYTE *>(mappedResource.pData);
+    UINT rowPitch = mappedResource.RowPitch;
+    UINT imageSize = rowPitch * desc.Height;
+
+    // 创建一个缓冲区来存储图像数据
+    std::vector<BYTE> imageData(imageSize);
+    memcpy(imageData.data(), pData, imageSize);
+
+    // 解除映射
+    m_pImmediateContext->Unmap(pStagingTexture, 0);
+
+    // 保存为 PNG 图像
+    stbi_write_png(filename, desc.Width, desc.Height, 4, imageData.data(), rowPitch);
+
+    // 释放资源
+    pStagingTexture->Release();
+    pRenderTarget->Release();
+}
+
+void Application::Run()
+{
 
     glfwSetWindowUserPointer(m_pWindow, this);
     glfwSetMouseButtonCallback(m_pWindow, GLFW_WindowCallbacks::MouseButtonCallback);
@@ -97,7 +152,10 @@ void Application::Run() {
     glfwSetScrollCallback(m_pWindow, GLFW_WindowCallbacks::MouseScrollCallback);
     glfwSetWindowSizeCallback(m_pWindow, GLFW_WindowCallbacks::ResizeWindowCallback);
 
-    while (!glfwWindowShouldClose(m_pWindow)) {
+    bool needToExit = false;
+
+    while (!glfwWindowShouldClose(m_pWindow) && !needToExit)
+    {
         glfwPollEvents();
 
         this->Update(this->CalculateFrameTime());
@@ -113,6 +171,24 @@ void Application::Run() {
 
         m_pD3D11On12Device->AcquireWrappedResources(m_pD3D11BackBuffers[frameIndex].GetAddressOf(), 1);
         this->RenderFrame(m_pRTV[frameIndex]);
+
+#ifdef WINDOWLESS
+        { // 保存到本地
+
+            static uint32_t frameCounter = 0;
+            std::cout << "frame" << frameCounter << std::endl;
+            if (frameCounter == 30)
+                SaveRenderTargetToPNG(m_pDevice.Get(),
+                                      m_pImmediateContext.Get(),
+                                      m_pRTV[frameIndex].Get(), "content/Output/Render.png");
+            frameCounter++;
+
+            if (frameCounter == 100)
+                needToExit = true;
+        }
+
+#endif
+
         this->RenderGUI(m_pRTV[frameIndex]);
         ImGui::Render();
 
@@ -130,13 +206,20 @@ void Application::Run() {
     this->WaitForGPU();
 }
 
-void Application::InitializeSDL() {
+void Application::InitializeSDL()
+{
 
     glfwInit();
+
+#ifdef WINDOWLESS
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE); // 设置窗口属性为隐藏
+#endif
+
     m_pWindow = glfwCreateWindow(m_ApplicationDesc.Width, m_ApplicationDesc.Height, m_ApplicationDesc.Tittle.c_str(), nullptr, nullptr);
 }
 
-void Application::InitializeD3D11() {
+void Application::InitializeD3D11()
+{
 
     HWND hWindow = glfwGetWin32Window(m_pWindow);
     uint32_t dxgiFactoryFlags = 0;
@@ -145,19 +228,24 @@ void Application::InitializeD3D11() {
 #if defined(_DEBUG)
     {
         DX::ComPtr<ID3D12Debug> pDebugController;
-        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&pDebugController)))) {
+        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&pDebugController))))
+        {
             pDebugController->EnableDebugLayer();
             dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
             d3d11DeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
         }
     }
 #endif
-    auto GetHardwareAdapter = [](DX::ComPtr<IDXGIFactory> pFactory) -> DX::ComPtr<IDXGIAdapter1> {
+
+    // 寻找最佳的高性能D3D12硬件适配器(非软件模拟的)
+    auto GetHardwareAdapter = [](DX::ComPtr<IDXGIFactory> pFactory) -> DX::ComPtr<IDXGIAdapter1>
+    {
         DX::ComPtr<IDXGIAdapter1> pAdapter;
         DX::ComPtr<IDXGIFactory6> pFactoryNew;
         pFactory.As(&pFactoryNew);
 
-        for (uint32_t adapterID = 0; DXGI_ERROR_NOT_FOUND != pFactoryNew->EnumAdapterByGpuPreference(adapterID, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&pAdapter)); adapterID++) {
+        for (uint32_t adapterID = 0; DXGI_ERROR_NOT_FOUND != pFactoryNew->EnumAdapterByGpuPreference(adapterID, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&pAdapter)); adapterID++)
+        {
             DXGI_ADAPTER_DESC1 desc = {};
             pAdapter->GetDesc1(&desc);
 
@@ -173,20 +261,21 @@ void Application::InitializeD3D11() {
     DX::ComPtr<IDXGIFactory4> pFactory;
     DX::ThrowIfFailed(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&pFactory)));
 
+    // 创建D3D12设备
     DX::ComPtr<IDXGIAdapter1> pAdapter = GetHardwareAdapter(pFactory);
     DX::ThrowIfFailed(D3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_11_1, IID_PPV_ARGS(&m_pD3D12Device)));
 
 #if defined(_DEBUG)
     DX::ComPtr<ID3D12InfoQueue> infoQueue;
-    if (SUCCEEDED(m_pD3D12Device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
+    if (SUCCEEDED(m_pD3D12Device->QueryInterface(IID_PPV_ARGS(&infoQueue))))
+    {
 
         D3D12_MESSAGE_SEVERITY severities[] = {
             D3D12_MESSAGE_SEVERITY_INFO,
         };
 
         D3D12_MESSAGE_ID denyIds[] = {
-            D3D12_MESSAGE_ID_INVALID_DESCRIPTOR_HANDLE
-        };
+            D3D12_MESSAGE_ID_INVALID_DESCRIPTOR_HANDLE};
 
         D3D12_INFO_QUEUE_FILTER filter = {};
         filter.DenyList.NumSeverities = _countof(severities);
@@ -195,18 +284,18 @@ void Application::InitializeD3D11() {
         filter.DenyList.pIDList = denyIds;
         DX::ThrowIfFailed(infoQueue->PushStorageFilter(&filter));
     }
-#endif    
+#endif
 
-    {
+    { // 创建命令队列
         D3D12_COMMAND_QUEUE_DESC desc = {};
         desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
         desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
         DX::ThrowIfFailed(m_pD3D12Device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_pD3D12CmdQueue)));
     }
 
-    {
+    { // 配置交换链
         DXGI_SWAP_CHAIN_DESC1 desc = {};
-        desc.BufferCount = FrameCount;
+        desc.BufferCount = FrameCount; // 三重缓冲
         desc.Width = m_ApplicationDesc.Width;
         desc.Height = m_ApplicationDesc.Height;
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -216,19 +305,20 @@ void Application::InitializeD3D11() {
 
         DX::ComPtr<IDXGISwapChain1> pSwapChain;
         DX::ThrowIfFailed(pFactory->CreateSwapChainForHwnd(m_pD3D12CmdQueue.Get(), hWindow, &desc, nullptr, nullptr, &pSwapChain));
-        DX::ThrowIfFailed(pFactory->MakeWindowAssociation(hWindow, DXGI_MWA_NO_ALT_ENTER));
+        DX::ThrowIfFailed(pFactory->MakeWindowAssociation(hWindow, DXGI_MWA_NO_ALT_ENTER)); // 关联到窗口
         DX::ThrowIfFailed(pSwapChain.As(&m_pSwapChain));
     }
 
-    {
-        DX::ThrowIfFailed(D3D11On12CreateDevice(m_pD3D12Device.Get(), d3d11DeviceFlags, nullptr, 0, reinterpret_cast<IUnknown**>(m_pD3D12CmdQueue.GetAddressOf()), 1, 0, &m_pDevice, &m_pImmediateContext, nullptr));
+    { // 在D3D12设备上创建D3D11设备，好处是利用成熟的D3D11渲染器，同时使用D3D12的强大性能
+        DX::ThrowIfFailed(D3D11On12CreateDevice(m_pD3D12Device.Get(), d3d11DeviceFlags, nullptr, 0, reinterpret_cast<IUnknown **>(m_pD3D12CmdQueue.GetAddressOf()), 1, 0, &m_pDevice, &m_pImmediateContext, nullptr));
         DX::ThrowIfFailed(m_pDevice.As(&m_pD3D11On12Device));
         DX::ThrowIfFailed(m_pImmediateContext.As(&m_pAnnotation));
 
-        for (uint32_t frameID = 0; frameID < FrameCount; frameID++) {
+        for (uint32_t frameID = 0; frameID < FrameCount; frameID++)
+        {
             DX::ThrowIfFailed(m_pSwapChain->GetBuffer(frameID, IID_PPV_ARGS(&m_pD3D12BackBuffers[frameID])));
 
-            D3D11_RESOURCE_FLAGS d3d11Flags = { D3D11_BIND_RENDER_TARGET };
+            D3D11_RESOURCE_FLAGS d3d11Flags = {D3D11_BIND_RENDER_TARGET};
             DX::ThrowIfFailed(m_pD3D11On12Device->CreateWrappedResource(m_pD3D12BackBuffers[frameID].Get(), &d3d11Flags, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET, IID_PPV_ARGS(&m_pD3D11BackBuffersDummy[frameID])));
             DX::ThrowIfFailed(m_pD3D11On12Device->CreateWrappedResource(m_pD3D12BackBuffers[frameID].Get(), &d3d11Flags, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT, IID_PPV_ARGS(&m_pD3D11BackBuffers[frameID])));
 
@@ -239,19 +329,21 @@ void Application::InitializeD3D11() {
         }
     }
 
+    // 创建Fence，用于同步CPU和GPU
     DX::ThrowIfFailed(m_pD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(m_pD3D12Fence.GetAddressOf())));
     m_FenceEvent = CreateEvent(nullptr, false, false, nullptr);
     if (m_FenceEvent == nullptr)
         DX::ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
 }
 
-void Application::InitializeImGUI() {
+void Application::InitializeImGUI()
+{
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImPlot::CreateContext();
 
-    const auto& io = ImGui::GetIO();
+    const auto &io = ImGui::GetIO();
     io.Fonts->AddFontFromFileTTF("content/Fonts/Roboto-Medium.ttf", 14.0f);
     ImPlot::GetStyle().AntiAliasedLines = true;
     ImGui::StyleColorsDark();
@@ -260,7 +352,8 @@ void Application::InitializeImGUI() {
     ImGui_ImplGlfw_InitForOther(m_pWindow, false);
 }
 
-float Application::CalculateFrameTime() {
+float Application::CalculateFrameTime()
+{
 
     const auto nowTime = std::chrono::high_resolution_clock::now();
     const auto delta = std::chrono::duration_cast<std::chrono::duration<float>>(nowTime - m_LastFrame).count();
@@ -268,7 +361,8 @@ float Application::CalculateFrameTime() {
     return delta;
 }
 
-void Application::WaitForGPU() {
+void Application::WaitForGPU()
+{
 
     m_FenceValue++;
     DX::ThrowIfFailed(m_pD3D12CmdQueue->Signal(m_pD3D12Fence.Get(), m_FenceValue));
@@ -276,13 +370,16 @@ void Application::WaitForGPU() {
     WaitForSingleObjectEx(m_FenceEvent, INFINITE, false);
 }
 
-void GLFW_WindowCallbacks::MouseButtonCallback(GLFWwindow* pWindow, int32_t button, int32_t action, int32_t modes) {
+void GLFW_WindowCallbacks::MouseButtonCallback(GLFWwindow *pWindow, int32_t button, int32_t action, int32_t modes)
+{
 
-    const auto pApplication = static_cast<Application*>(glfwGetWindowUserPointer(pWindow));
+    const auto pApplication = static_cast<Application *>(glfwGetWindowUserPointer(pWindow));
     const auto pState = &pApplication->m_GLFWState;
 
-    auto MouseButtonCall = [&](GLFWWindowState::MouseButton button, int32_t action) -> void {
-        switch (action) {
+    auto MouseButtonCall = [&](GLFWWindowState::MouseButton button, int32_t action) -> void
+    {
+        switch (action)
+        {
         case GLFW_PRESS:
             pState->MouseState[button] = GLFWWindowState::MousePress;
             break;
@@ -294,7 +391,8 @@ void GLFW_WindowCallbacks::MouseButtonCallback(GLFWwindow* pWindow, int32_t butt
         }
     };
 
-    switch (button) {
+    switch (button)
+    {
     case GLFW_MOUSE_BUTTON_RIGHT:
         MouseButtonCall(GLFWWindowState::MouseButtonRight, action);
         break;
@@ -306,12 +404,14 @@ void GLFW_WindowCallbacks::MouseButtonCallback(GLFWwindow* pWindow, int32_t butt
     }
 }
 
-void GLFW_WindowCallbacks::MouseMoveCallback(GLFWwindow* pWindow, double mousePosX, double mousePosY) {
+void GLFW_WindowCallbacks::MouseMoveCallback(GLFWwindow *pWindow, double mousePosX, double mousePosY)
+{
 
-    const auto pApplication = static_cast<Application*>(glfwGetWindowUserPointer(pWindow));
+    const auto pApplication = static_cast<Application *>(glfwGetWindowUserPointer(pWindow));
     const auto pState = &pApplication->m_GLFWState;
 
-    if (pState->MouseState[GLFWWindowState::MouseButtonRight] == GLFWWindowState::MousePress) {
+    if (pState->MouseState[GLFWWindowState::MouseButtonRight] == GLFWWindowState::MousePress)
+    {
         const double dX = mousePosX - pState->PreviousMousePositionX;
         const double dY = mousePosY - pState->PreviousMousePositionY;
         pApplication->EventMouseMove(static_cast<float>(dX), static_cast<float>(dY));
@@ -321,14 +421,16 @@ void GLFW_WindowCallbacks::MouseMoveCallback(GLFWwindow* pWindow, double mousePo
     pState->PreviousMousePositionY = mousePosY;
 }
 
-void GLFW_WindowCallbacks::MouseScrollCallback(GLFWwindow* pWindow, double offsetX, double offsetY) {
+void GLFW_WindowCallbacks::MouseScrollCallback(GLFWwindow *pWindow, double offsetX, double offsetY)
+{
 
-    const auto pApplication = static_cast<Application*>(glfwGetWindowUserPointer(pWindow));
+    const auto pApplication = static_cast<Application *>(glfwGetWindowUserPointer(pWindow));
     pApplication->EventMouseWheel(static_cast<float>(offsetY));
 }
 
-void GLFW_WindowCallbacks::ResizeWindowCallback(GLFWwindow* pWindow, int32_t width, int32_t height) {
+void GLFW_WindowCallbacks::ResizeWindowCallback(GLFWwindow *pWindow, int32_t width, int32_t height)
+{
 
-    const auto pApplication = static_cast<Application*>(glfwGetWindowUserPointer(pWindow));
+    const auto pApplication = static_cast<Application *>(glfwGetWindowUserPointer(pWindow));
     pApplication->Resize(width, height);
 }
