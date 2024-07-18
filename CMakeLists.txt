@@ -1,10 +1,10 @@
-cmake_minimum_required (VERSION 3.19)
+cmake_minimum_required(VERSION 3.19)
 
 project(VolumeRender CXX)
 
-set(PROJECT_CONTENT            "${CMAKE_CURRENT_SOURCE_DIR}/content")
-set(PROJECT_DIRECTORY          "${CMAKE_CURRENT_SOURCE_DIR}")
-set(PROJECT_OUTPUT_DIRECTORY   "${PROJECT_DIRECTORY}/x64")
+set(PROJECT_CONTENT "${CMAKE_CURRENT_SOURCE_DIR}/content")
+set(PROJECT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+set(PROJECT_OUTPUT_DIRECTORY "${PROJECT_DIRECTORY}/x64")
 list(PREPEND CMAKE_MODULE_PATH "${PROJECT_DIRECTORY}/cmake")
 
 include(cmake_settings)
@@ -17,7 +17,9 @@ include(3rd-party/implot)
 include(3rd-party/directx-tex)
 include(3rd-party/nlohmann)
 
-set(INCLUDE 
+find_package(OpenCV CONFIG REQUIRED)
+
+set(INCLUDE
     include/Application.h
     include/ApplicationVolumeRender.h
     include/Common.h
@@ -33,12 +35,14 @@ set(SOURCE
 file(GLOB SHADERS "content/Shaders/*.hlsl")
 
 source_group("include" FILES ${INCLUDE})
-source_group("source" FILES  ${SOURCE})
-source_group("shaders" FILES  ${SHADERS})
+source_group("source" FILES ${SOURCE})
+source_group("shaders" FILES ${SHADERS})
 
 add_executable(VolumeRender ${INCLUDE} ${SOURCE} ${SHADERS})
 
 target_link_libraries(VolumeRender PRIVATE fmt glfw imgui implot nlohmann_json directx-tex d3d11.lib d3d12.lib dxgi.lib d3dcompiler.lib)
+target_link_libraries(VolumeRender PRIVATE opencv_ml opencv_dnn opencv_core opencv_flann)
+
 target_include_directories(VolumeRender PRIVATE "include")
 
 set_target_properties(VolumeRender PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_DIRECTORY}")

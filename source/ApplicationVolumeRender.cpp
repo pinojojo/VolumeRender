@@ -32,6 +32,107 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include "Utility.h"
+
+#include <opencv2/opencv.hpp>
+
+bool LoadVolumeDataFromTiff(const std::string &tiff_path,
+                            std::vector<uint16_t> &intensity,
+                            int &width, int &height, int &depth)
+{
+    std::vector<cv::Mat> layers;
+
+    // 使用 imreadmulti 读取多层图像
+    if (!cv::imreadmulti(tiff_path, layers, cv::IMREAD_ANYDEPTH | cv::IMREAD_ANYCOLOR))
+    {
+        std::cout << "Successfully loaded " << layers.size() << " layers." << std::endl;
+        return false;
+    }
+
+    width = layers[0].cols;
+    height = layers[0].rows;
+    depth = layers.size();
+
+    if (width <= 0 || height <= 0 || depth <= 0)
+    {
+        std::cout << "Invalid volume data." << std::endl;
+        return false;
+    }
+
+    if (layers[0].depth() != CV_16U && layers[0].depth() != CV_8U)
+    {
+        std::cout << "Invalid volume data format, depth must be 8 or 16 bits." << std::endl;
+        return false;
+    }
+
+    // 先转为16bit
+    for (int z = 0; z < depth; z++)
+    {
+        if (layers[z].depth() != CV_16U)
+        {
+            cv::Mat layer;
+            layers[z].convertTo(layer, CV_16U);
+            layers[z] = layer;
+        }
+    }
+
+    if (intensity.size() != width * height * depth)
+    {
+        intensity.resize(width * height * depth);
+    }
+
+    for (int z = 0; z < depth; z++)
+    {
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                intensity[z * width * height + y * width + x] = layers[z].at<uint16_t>(y, x);
+            }
+        }
+    }
+}
+
+std::vector<double> GetHistogram(const std::vector<uint16_t> &intensity)
+{
+    std::vector<double> histogram(65536, 0.0);
+
+    for (auto value : intensity)
+    {
+        histogram[value]++;
+    }
+
+    return histogram;
+}
+
+std::vector<double> GetCDF(const std::vector<double> &histogram)
+{
+    std::vector<double> cdf(65536, 0.0);
+
+    cdf[0] = histogram[0];
+    for (int i = 1; i < 65536; i++)
+    {
+        cdf[i] = cdf[i - 1] + histogram[i];
+    }
+
+    return cdf;
+}
+
+uint16_t EvaluateIntensityOfPercentile(const std::vector<double> &cdf, double percentile)
+{
+    auto total = cdf[65535];
+    auto target = total * percentile;
+
+    for (int i = 0; i < 65536; i++)
+    {
+        if (cdf[i] >= target)
+        {
+            return i;
+        }
+    }
+
+    return 65535;
+}
 
 struct FrameBuffer
 {
@@ -711,6 +812,15 @@ void ApplicationVolumeRender::Update(float deltaTime)
             InitializeTransferFunction();
             m_IsReloadTransferFunc = false;
         }
+
+        if (m_IsVolumeDataLoaded)
+        {
+            // 读取tif数据
+            std::vector<uint16_t> intensity;
+            int width, height, depth;
+
+            m_IsVolumeDataLoaded = false;
+        }
     }
     catch (std::exception const &e)
     {
@@ -976,6 +1086,16 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
     static bool isShowAppMetrics = false;
     static bool isShowAppAbout = false;
 
+    if (ImGui::Button("Load Volume"))
+    {
+        std::wstring filter = L"Volume Files\0*.tif\0";
+        auto select_file = utils::SelectFile(filter.c_str());
+        std::wcout << select_file << std::endl;
+
+        m_volumeDataPath = select_file;
+        m_IsVolumeDataLoaded = true;
+    }
+
     ImGui::Text("Frame Rate: %.1f FPS", ImGui::GetIO().Framerate);
 
     if (isShowAppMetrics)
@@ -986,9 +1106,14 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
 
     if (ImGui::CollapsingHeader("TransferFunction", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        if (ImPlot::BeginPlot("Opacity", 0, 0, ImVec2(-1, 175), 0, ImPlotAxisFlags_None, ImPlotAxisFlags_None))
+        ImPlot::SetNextPlotLimitsX(0.0f, 5000.0f);
+        ImPlot::SetNextPlotLimitsY(0.0f, 1.025f);
+        if (ImPlot::BeginPlot("Opacity", 0, 0, ImVec2(-1, 175), 0,
+                              ImPlotAxisFlags_LockMin | ImPlotAxisFlags_LockMax,
+                              ImPlotAxisFlags_LockMin | ImPlotAxisFlags_LockMax))
         {
             std::vector<ImVec2> opacity;
+
             opacity.resize(m_SamplingCount);
 
             for (uint32_t index = 0; index < m_SamplingCount; index++)
@@ -997,6 +1122,7 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
                 const float y = m_OpacityTransferFunc.Evaluate(x);
                 opacity[index] = ImVec2(x * (m_OpacityTransferFunc.PLF.RangeMax - m_OpacityTransferFunc.PLF.RangeMin) + m_OpacityTransferFunc.PLF.RangeMin, y);
             }
+
             ImPlot::PushStyleVar(ImPlotStyleVar_FillAlpha, 0.25f);
             ImPlot::PlotShaded("Opacity", &opacity[0].x, &opacity[0].y, std::size(opacity), 0, 0, sizeof(ImVec2));
             ImPlot::PopStyleVar();

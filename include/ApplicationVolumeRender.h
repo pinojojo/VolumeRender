@@ -141,8 +141,8 @@ private:
     Hawk::Math::Vec3 m_BoundingBoxMax = Hawk::Math::Vec3(+0.5f, +0.5f, +0.5f);
 
     float m_DeltaTime = 0.0f;
-    float m_RotateSensitivity = 0.25f;
-    float m_ZoomSensitivity = 1.5f;
+    float m_RotateSensitivity = 2.25f;
+    float m_ZoomSensitivity = 3.5f;
     float m_Density = 100.0f;
     float m_Exposure = 12.0f;
     float m_Zoom = 1.0f;
@@ -164,4 +164,7 @@ private:
     std::random_device m_RandomDevice;
     std::mt19937 m_RandomGenerator;
     std::uniform_real_distribution<float> m_RandomDistribution;
+
+    std::wstring m_volumeDataPath;
+    bool m_IsVolumeDataLoaded = false;
 };
