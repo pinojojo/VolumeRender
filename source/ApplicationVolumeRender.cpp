@@ -34,6 +34,9 @@
 #include <random>
 #include "Utility.h"
 
+#include <locale>
+#include <codecvt>
+
 #include <opencv2/opencv.hpp>
 
 bool LoadVolumeDataFromTiff(const std::string &tiff_path,
@@ -103,6 +106,30 @@ std::vector<double> GetHistogram(const std::vector<uint16_t> &intensity)
     }
 
     return histogram;
+}
+
+void GetMinMaxOfHistogram(const std::vector<double> &histogram, uint16_t &min, uint16_t &max)
+{
+    min = 0;
+    max = 65535;
+
+    for (int i = 0; i < 65536; i++)
+    {
+        if (histogram[i] > 0)
+        {
+            min = i;
+            break;
+        }
+    }
+
+    for (int i = 65535; i >= 0; i--)
+    {
+        if (histogram[i] > 0)
+        {
+            max = i;
+            break;
+        }
+    }
 }
 
 std::vector<double> GetCDF(const std::vector<double> &histogram)
@@ -285,7 +312,20 @@ void ApplicationVolumeRender::InitializeVolumeTexture()
     for (size_t index = 0u; index < std::size(intensity); index++)
         intensity[index] = NormalizeIntensity(intensity[index], tmin, tmax);
 
-    {
+    { // 统计直方图
+        m_HistogramData = GetHistogram(intensity);
+        m_IsHistogramUpdated = true;
+
+        uint16_t min, max;
+        GetMinMaxOfHistogram(m_HistogramData, min, max);
+        std::cout << "Min: " << min << " Max: " << max << std::endl;
+
+        uint16_t p5 = EvaluateIntensityOfPercentile(GetCDF(m_HistogramData), 0.05);
+        uint16_t p95 = EvaluateIntensityOfPercentile(GetCDF(m_HistogramData), 0.95);
+        std::cout << "P5: " << p5 << " P95: " << p95 << std::endl;
+    }
+
+    { // 生成D3D资源
         DX::ComPtr<ID3D11Texture3D> pTextureIntensity;
         D3D11_TEXTURE3D_DESC desc = {};
         desc.Width = m_DimensionX;
@@ -819,7 +859,46 @@ void ApplicationVolumeRender::Update(float deltaTime)
             std::vector<uint16_t> intensity;
             int width, height, depth;
 
+            if (LoadVolumeDataFromTiff(m_VolumeDataPath, intensity, width, height, depth))
+            {
+                // 计算Histogram
+                auto histogram = GetHistogram(intensity);
+                m_IsVolumeDataLoaded = true;
+
+                // 计算最小值和最大值
+                uint16_t min, max;
+                GetMinMaxOfHistogram(histogram, min, max);
+                std::cout << "min: " << min << " max: " << max << std::endl;
+
+                // 计算CDF
+                auto cdf = GetCDF(histogram);
+
+                // 计算CDF的百分之5和百分之95，作为最小值和最大值
+                auto p5 = EvaluateIntensityOfPercentile(cdf, 0.05f);
+                auto p95 = EvaluateIntensityOfPercentile(cdf, 0.95f);
+
+                std::cout << "p5: " << p5 << " p95: " << p95 << std::endl;
+
+                // 依据p5和p95的值，重新映射强度值
+                for (auto &e : intensity)
+                {
+                    double intensityNorm = (e - p5) / (p95 - p5);
+                    intensityNorm = (std::clamp)(intensityNorm, 0.0, 1.0);
+                    e = static_cast<uint16_t>(intensityNorm * std::numeric_limits<uint16_t>::max());
+                }
+
+                UpdateVolumeTexture(intensity, width, height, depth);
+                m_FrameIndex = 0;
+            }
+
             m_IsVolumeDataLoaded = false;
+        }
+
+        if (m_IsRecreateOpacityTexture) // 更新透明度映射表
+        {
+            m_pSRVOpacityTF = m_OpacityTransferFunc.GenerateTexture(m_pDevice, m_SamplingCount);
+            m_IsRecreateOpacityTexture = false;
+            m_FrameIndex = 0;
         }
     }
     catch (std::exception const &e)
@@ -1078,9 +1157,9 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
 
 void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
 {
-
     assert(ImGui::GetCurrentContext() != nullptr && "Missing dear imgui context. Refer to examples app!");
 
+    ImGui::ShowDemoWindow();
     ImGui::Begin("Settings");
 
     static bool isShowAppMetrics = false;
@@ -1092,8 +1171,16 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
         auto select_file = utils::SelectFile(filter.c_str());
         std::wcout << select_file << std::endl;
 
-        m_volumeDataPath = select_file;
+        std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+        m_VolumeDataPath = conv.to_bytes(select_file);
+
         m_IsVolumeDataLoaded = true;
+    }
+
+    if (!m_VolumeDataPath.empty())
+    {
+        ImGui::SameLine();
+        ImGui::Text("Volume Path: %s", m_VolumeDataPath.c_str());
     }
 
     ImGui::Text("Frame Rate: %.1f FPS", ImGui::GetIO().Framerate);
@@ -1106,12 +1193,78 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
 
     if (ImGui::CollapsingHeader("TransferFunction", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImPlot::SetNextPlotLimitsX(0.0f, 5000.0f);
+        static double X_LIMIT_MAX = 5000.0;
+        static double X_LIMIT_MIN = 0.0;
+        ImPlot::SetNextPlotLimitsX(X_LIMIT_MIN, X_LIMIT_MAX);
         ImPlot::SetNextPlotLimitsY(0.0f, 1.025f);
         if (ImPlot::BeginPlot("Opacity", 0, 0, ImVec2(-1, 175), 0,
                               ImPlotAxisFlags_LockMin | ImPlotAxisFlags_LockMax,
                               ImPlotAxisFlags_LockMin | ImPlotAxisFlags_LockMax))
         {
+
+            { // 绘制直方图
+                static std::vector<double> histogramX, histogramY;
+                if (m_IsHistogramUpdated)
+                {
+                    histogramX.clear();
+                    histogramY.clear();
+
+                    std::vector<double> histogramNormalized = m_HistogramData;
+                    // 找最大值
+                    double max = *std::max_element(histogramNormalized.begin(), histogramNormalized.end());
+                    // 归一化
+                    std::transform(histogramNormalized.begin(), histogramNormalized.end(), histogramNormalized.begin(), [max](double value)
+                                   { return value / max; });
+
+                    // 生成直方图渲染数据
+                    static const int HISTOGRAM_SEGMENTS = 200; // 渲染时不可能显示所有的直方图数据，所以需要对直方图数据进行采样
+                    int samplesPerSegment = (X_LIMIT_MAX - X_LIMIT_MIN) / HISTOGRAM_SEGMENTS;
+
+                    for (int i = 0; i < HISTOGRAM_SEGMENTS; i++)
+                    {
+                        // 找片段内的最大和最小，并且知道最大值的位置是前还是后
+                        int start = i * samplesPerSegment;
+                        int end = (i + 1) * samplesPerSegment;
+
+                        auto peakPos = std::max_element(histogramNormalized.begin() + start, histogramNormalized.begin() + end);
+                        auto peakIndex = std::distance(histogramNormalized.begin(), peakPos);
+
+                        auto valleyPos = std::min_element(histogramNormalized.begin() + start, histogramNormalized.begin() + end);
+                        auto valleyIndex = std::distance(histogramNormalized.begin(), valleyPos);
+
+                        if (peakIndex < valleyIndex)
+                        {
+                            histogramX.push_back(peakIndex);
+                            histogramY.push_back(*peakPos);
+                            histogramX.push_back(valleyIndex);
+                            histogramY.push_back(*valleyPos);
+                        }
+                        else
+                        {
+                            histogramX.push_back(valleyIndex);
+                            histogramY.push_back(*valleyPos);
+                            histogramX.push_back(peakIndex);
+                            histogramY.push_back(*peakPos);
+                        }
+                    }
+
+                    // 找 histogramY 的最大值，依据最大值整体缩放，知道最大值为1
+                    double maxHistogramY = *std::max_element(histogramY.begin(), histogramY.end());
+                    std::cout << "maxHistogramY: " << maxHistogramY << std::endl;
+                    std::transform(histogramY.begin(), histogramY.end(), histogramY.begin(), [maxHistogramY](double value)
+                                   { return value / maxHistogramY; });
+
+                    m_IsHistogramUpdated = false;
+                }
+
+                if (histogramX.size() > 0)
+                {
+                    ImPlot::PushStyleVar(ImPlotStyleVar_FillAlpha, 0.15f);
+                    ImPlot::PlotLine("Histogram", histogramX.data(), histogramY.data(), histogramX.size());
+                    ImPlot::PopStyleVar();
+                }
+            }
+
             std::vector<ImVec2> opacity;
 
             opacity.resize(m_SamplingCount);
@@ -1128,7 +1281,155 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
             ImPlot::PopStyleVar();
 
             ImPlot::PlotLine("Opacity", &opacity[0].x, &opacity[0].y, std::size(opacity), 0, sizeof(ImVec2));
+
             ImPlot::EndPlot();
+        }
+
+        { // 透明度编辑表格
+            ImGuiTableFlags flags2 = ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_Borders;
+            static const int COLUMNS_COUNT = 4;
+            if (ImGui::BeginTable("table_opacity", COLUMNS_COUNT, flags2))
+            {
+                ImGui::TableSetupColumn("ID");
+                ImGui::TableSetupColumn("Intensity");
+                ImGui::TableSetupColumn("Opacity");
+
+                // [2.1] Right-click on the TableHeadersRow() line to open the default table context menu.
+                ImGui::TableHeadersRow();
+                for (int row = 0; row < m_OpacityTransferFunc.PLF.Count; row++)
+                {
+                    ImGui::TableNextRow();
+                    for (int column = 0; column < COLUMNS_COUNT; column++)
+                    {
+                        // Submit dummy contents
+                        ImGui::TableSetColumnIndex(column);
+
+                        if (column == 0)
+                        {
+                            ImGui::Text("%d", row + 1);
+                        }
+                        else if (column == 1)
+                        {
+                            double position = m_OpacityTransferFunc.PLF.Position[row];
+                            ImGui::Text("%d", int(position));
+                        }
+                        else if (column == 2)
+                        {
+                            float opacity = m_OpacityTransferFunc.PLF.Value[row];
+                            ImGui::PushID(row * COLUMNS_COUNT + column);
+                            if (ImGui::SliderFloat("##opa", &opacity, 0, 1, "%.2f"))
+                            {
+                                m_OpacityTransferFunc.PLF.Value[row] = opacity;
+                                m_IsRecreateOpacityTexture = true;
+                            }
+                            ImGui::PopID();
+                        }
+                        else if (column == COLUMNS_COUNT - 1)
+                        {
+                            ImGui::PushID(row * COLUMNS_COUNT + column);
+                            ImGui::SmallButton("Delete");
+                            ImGui::PopID();
+                        }
+                    }
+                }
+
+                int hovered_column = -1;
+                for (int column = 0; column < COLUMNS_COUNT + 1; column++)
+                {
+                    ImGui::PushID(column);
+                    if (ImGui::TableGetColumnFlags(column) & ImGuiTableColumnFlags_IsHovered)
+                        hovered_column = column;
+                    if (hovered_column == column && !ImGui::IsAnyItemHovered() && ImGui::IsMouseReleased(1))
+                        ImGui::OpenPopup("MyPopup");
+                    if (ImGui::BeginPopup("MyPopup"))
+                    {
+                        if (column == COLUMNS_COUNT)
+                            ImGui::Text("This is a custom popup for unused space after the last column.");
+                        else
+                            ImGui::Text("This is a custom popup for Column %d", column);
+                        if (ImGui::Button("Close"))
+                            ImGui::CloseCurrentPopup();
+                        ImGui::EndPopup();
+                    }
+                    ImGui::PopID();
+                }
+
+                ImGui::EndTable();
+            }
+
+            if (ImGui::Button("Add"))
+            {
+            }
+        }
+
+        { // 颜色点编辑表格
+            ImGuiTableFlags flags2 = ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_Borders;
+            static const int COLUMNS_COUNT = 6;
+            if (ImGui::BeginTable("table_colos", COLUMNS_COUNT, flags2))
+            {
+                ImGui::TableSetupColumn("ID");
+                ImGui::TableSetupColumn("Intensity");
+                ImGui::TableSetupColumn("Diffuse");
+                ImGui::TableSetupColumn("Specular");
+                ImGui::TableSetupColumn("Emission");
+
+                ImGui::TableHeadersRow();
+                for (int row = 0; row < m_DiffuseTransferFunc.PLF[0].Count; row++)
+                {
+                    ImGui::TableNextRow();
+                    for (int column = 0; column < COLUMNS_COUNT; column++)
+                    {
+                        // Submit dummy contents
+                        ImGui::TableSetColumnIndex(column);
+
+                        if (column == 0)
+                        {
+                            ImGui::Text("%d", row + 1);
+                        }
+                        else if (column == 1)
+                        {
+                            double position = m_DiffuseTransferFunc.PLF[0].Position[row];
+                            ImGui::Text("%d", int(position));
+                        }
+                        else if (column == 2)
+                        {
+                            double r = m_DiffuseTransferFunc.PLF[0].Value[row];
+                            double g = m_DiffuseTransferFunc.PLF[1].Value[row];
+                            double b = m_DiffuseTransferFunc.PLF[2].Value[row];
+
+                            ImGui::Text("%.2f,%.2f,%.2f", r, g, b);
+                        }
+                        else if (column == 3)
+                        {
+                            double r = m_SpecularTransferFunc.PLF[0].Value[row];
+                            double g = m_SpecularTransferFunc.PLF[1].Value[row];
+                            double b = m_SpecularTransferFunc.PLF[2].Value[row];
+
+                            ImGui::Text("%.2f,%.2f,%.2f", r, g, b);
+                        }
+                        else if (column == 4)
+                        {
+                            double r = m_EmissionTransferFunc.PLF[0].Value[row];
+                            double g = m_EmissionTransferFunc.PLF[1].Value[row];
+                            double b = m_EmissionTransferFunc.PLF[2].Value[row];
+
+                            ImGui::Text("%.2f,%.2f,%.2f", r, g, b);
+                        }
+                        else if (column == COLUMNS_COUNT - 1)
+                        {
+                            ImGui::PushID(row * COLUMNS_COUNT + column);
+                            ImGui::SmallButton("Delete");
+                            ImGui::PopID();
+                        }
+                    }
+                }
+
+                ImGui::EndTable();
+            }
+
+            if (ImGui::Button("Add##a"))
+            {
+            }
         }
     }
 

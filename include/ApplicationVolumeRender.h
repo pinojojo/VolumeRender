@@ -165,6 +165,10 @@ private:
     std::mt19937 m_RandomGenerator;
     std::uniform_real_distribution<float> m_RandomDistribution;
 
-    std::wstring m_volumeDataPath;
+    std::string m_VolumeDataPath;
     bool m_IsVolumeDataLoaded = false;
+    bool m_IsRecreateOpacityTexture = false;
+
+    std::vector<double> m_HistogramData;
+    bool m_IsHistogramUpdated = false;
 };
