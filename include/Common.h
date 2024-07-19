@@ -38,6 +38,8 @@
 
 // #define WINDOWLESS
 
+#define USE_TIFF
+
 namespace DX
 {
     template <typename T>

@@ -331,6 +331,17 @@ void ApplicationVolumeRender::InitializeShaders()
 void ApplicationVolumeRender::InitializeVolumeTexture()
 {
 
+#ifdef USE_TIFF
+
+    std::vector<uint16_t> intensity;
+    int width, height, depth;
+    LoadVolumeDataFromTiff("content/Textures/mouse_stack.tif", intensity, width, height, depth);
+    m_DimensionX = width;
+    m_DimensionY = height;
+    m_DimensionZ = depth;
+    m_DimensionMipLevels = static_cast<uint16_t>(std::ceil(std::log2(std::max(std::max(m_DimensionX, m_DimensionY), m_DimensionZ)))) + 1;
+
+#else
     std::unique_ptr<FILE, decltype(&fclose)> pFile(fopen("content/Textures/manix.dat", "rb"), fclose);
     if (!pFile)
         throw std::runtime_error("Failed to open file: " + std::string("Data/Textures/manix.dat"));
@@ -343,15 +354,16 @@ void ApplicationVolumeRender::InitializeVolumeTexture()
     fread(intensity.data(), sizeof(uint16_t), m_DimensionX * m_DimensionY * m_DimensionZ, pFile.get());
     m_DimensionMipLevels = static_cast<uint16_t>(std::ceil(std::log2(std::max(std::max(m_DimensionX, m_DimensionY), m_DimensionZ)))) + 1;
 
-    std::cout << "UpdateVolumeTexture: " << m_DimensionX << " " << m_DimensionY << " " << m_DimensionZ << " " << m_DimensionMipLevels << std::endl;
+#endif
 
+    std::cout << "UpdateVolumeTexture: " << m_DimensionX << " " << m_DimensionY << " " << m_DimensionZ << " " << m_DimensionMipLevels << std::endl;
     auto NormalizeIntensity = [](uint16_t intensity, uint16_t min, uint16_t max) -> uint16_t
     {
         return static_cast<uint16_t>(std::round(std::numeric_limits<uint16_t>::max() * ((intensity - min) / static_cast<F32>(max - min))));
     };
-
     uint16_t tmin = 0 << 12; // Min HU [0, 4096]
     uint16_t tmax = 1 << 12; // Max HU [0, 4096]
+    std::cout << "tmin: " << tmin << " tmax: " << tmax << std::endl;
     for (size_t index = 0u; index < std::size(intensity); index++)
         intensity[index] = NormalizeIntensity(intensity[index], tmin, tmax);
 
@@ -597,7 +609,7 @@ void ApplicationVolumeRender::UpdateVolumeTexture(const std::vector<uint16_t> &i
 
     std::cout << "UpdateVolumeTexture Done." << std::endl;
 
-    {
+    { // 生成梯度纹理
         DX::ComPtr<ID3D11Texture3D> pTextureGradient;
         D3D11_TEXTURE3D_DESC desc = {};
         desc.Width = m_DimensionX;
@@ -868,7 +880,6 @@ void ApplicationVolumeRender::InitializeTileBuffer()
 
 void ApplicationVolumeRender::InitializeEnvironmentMap()
 {
-
     DX::ThrowIfFailed(DirectX::CreateDDSTextureFromFile(m_pDevice.Get(), L"content/Textures/qwantani_2k.dds", nullptr, m_pSRVEnvironment.GetAddressOf()));
 }
 

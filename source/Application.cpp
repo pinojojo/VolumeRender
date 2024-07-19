@@ -346,7 +346,7 @@ void Application::InitializeImGUI()
     ImPlot::CreateContext();
 
     const auto &io = ImGui::GetIO();
-    io.Fonts->AddFontFromFileTTF("content/Fonts/Roboto-Medium.ttf", 14.0f);
+    io.Fonts->AddFontFromFileTTF("content/Fonts/Roboto-Medium.ttf", 16.0f);
     ImPlot::GetStyle().AntiAliasedLines = true;
     ImGui::StyleColorsDark();
 
