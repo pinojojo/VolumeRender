@@ -39,6 +39,30 @@
 
 #include <opencv2/opencv.hpp>
 
+// 将数值对齐到最近的2的幂次方
+unsigned int AlignToNearestPowerOf2(unsigned int value)
+{
+    if (value == 0)
+        return 1;
+
+    // 如果已经是2的幂次方，则直接返回
+    if ((value & (value - 1)) == 0)
+        return value;
+
+    // 找到大于等于该值的最小的2的幂次方
+    unsigned int powerOf2 = 1;
+    while (powerOf2 < value)
+    {
+        powerOf2 <<= 1;
+    }
+
+    // 找到小于该值的最大的2的幂次方
+    unsigned int lowerPowerOf2 = powerOf2 >> 1;
+
+    // 返回更接近的那个
+    return (value - lowerPowerOf2) < (powerOf2 - value) ? lowerPowerOf2 : powerOf2;
+}
+
 bool LoadVolumeDataFromTiff(const std::string &tiff_path,
                             std::vector<uint16_t> &intensity,
                             int &width, int &height, int &depth)
@@ -66,6 +90,23 @@ bool LoadVolumeDataFromTiff(const std::string &tiff_path,
     {
         std::cout << "Invalid volume data format, depth must be 8 or 16 bits." << std::endl;
         return false;
+    }
+
+    // 先保证每个图片的宽高都是2的N次方，如果不是需要，补齐
+    for (int z = 0; z < depth; z++)
+    {
+        int new_width = AlignToNearestPowerOf2(width);
+        int new_height = AlignToNearestPowerOf2(height);
+
+        if (new_width != width || new_height != height)
+        {
+            cv::Mat layer(new_height, new_width, layers[z].type(), cv::Scalar(0));
+            layers[z].copyTo(layer(cv::Rect(0, 0, width, height)));
+            layers[z] = layer;
+        }
+
+        width = new_width;
+        height = new_height;
     }
 
     // 先转为16bit
@@ -302,6 +343,8 @@ void ApplicationVolumeRender::InitializeVolumeTexture()
     fread(intensity.data(), sizeof(uint16_t), m_DimensionX * m_DimensionY * m_DimensionZ, pFile.get());
     m_DimensionMipLevels = static_cast<uint16_t>(std::ceil(std::log2(std::max(std::max(m_DimensionX, m_DimensionY), m_DimensionZ)))) + 1;
 
+    std::cout << "UpdateVolumeTexture: " << m_DimensionX << " " << m_DimensionY << " " << m_DimensionZ << " " << m_DimensionMipLevels << std::endl;
+
     auto NormalizeIntensity = [](uint16_t intensity, uint16_t min, uint16_t max) -> uint16_t
     {
         return static_cast<uint16_t>(std::round(std::numeric_limits<uint16_t>::max() * ((intensity - min) / static_cast<F32>(max - min))));
@@ -441,10 +484,14 @@ void ApplicationVolumeRender::InitializeVolumeTexture()
 
 void ApplicationVolumeRender::UpdateVolumeTexture(const std::vector<uint16_t> &intensity, int width, int height, int depth)
 {
+    m_pImmediateContext->Flush();
 
     m_DimensionX = width;
     m_DimensionY = height;
     m_DimensionZ = depth;
+    m_DimensionMipLevels = static_cast<uint16_t>(std::ceil(std::log2(std::max(std::max(m_DimensionX, m_DimensionY), m_DimensionZ)))) + 1;
+
+    std::cout << "UpdateVolumeTexture: " << m_DimensionX << " " << m_DimensionY << " " << m_DimensionZ << " " << m_DimensionMipLevels << std::endl;
 
     { // 清理旧的资源
         for (auto &pSRV : m_pSRVVolumeIntensity)
@@ -460,6 +507,8 @@ void ApplicationVolumeRender::UpdateVolumeTexture(const std::vector<uint16_t> &i
         m_pUAVGradient.Reset();
     }
 
+    std::cout << "Clear old resources." << std::endl;
+
     {
         // 创建一个3D纹理
         DX::ComPtr<ID3D11Texture3D> pTextureIntensity;
@@ -474,6 +523,8 @@ void ApplicationVolumeRender::UpdateVolumeTexture(const std::vector<uint16_t> &i
         ;
         DX::ThrowIfFailed(m_pDevice->CreateTexture3D(&desc, nullptr, pTextureIntensity.GetAddressOf()));
 
+        std::cout << "Create 3D texture." << std::endl;
+
         // 为每一个mipmap级别都创建一个SRV
         for (uint32_t mipLevelID = 0; mipLevelID < desc.MipLevels; mipLevelID++)
         {
@@ -487,6 +538,8 @@ void ApplicationVolumeRender::UpdateVolumeTexture(const std::vector<uint16_t> &i
             DX::ThrowIfFailed(m_pDevice->CreateShaderResourceView(pTextureIntensity.Get(), &descSRV, pSRVVolumeIntensity.GetAddressOf()));
             m_pSRVVolumeIntensity.push_back(pSRVVolumeIntensity);
         }
+
+        std::cout << "Create SRV." << std::endl;
 
         // 为每一个mipmap级别都创建一个UAV
         for (uint32_t mipLevelID = 0; mipLevelID < desc.MipLevels; mipLevelID++)
@@ -503,9 +556,12 @@ void ApplicationVolumeRender::UpdateVolumeTexture(const std::vector<uint16_t> &i
             m_pUAVVolumeIntensity.push_back(pUAVVolumeIntensity);
         }
 
+        std::cout << "Create UAV." << std::endl;
+
         // 更新mipmap级别0的数据，也就是原始数据
         D3D11_BOX box = {0, 0, 0, desc.Width, desc.Height, desc.Depth};
         m_pImmediateContext->UpdateSubresource(pTextureIntensity.Get(), 0, &box, std::data(intensity), sizeof(uint16_t) * desc.Width, sizeof(uint16_t) * desc.Height * desc.Width);
+        std::cout << "Update Subresource." << std::endl;
 
         // 生成mipmap
         for (uint32_t mipLevelID = 1; mipLevelID < desc.MipLevels - 1; mipLevelID++)
@@ -535,8 +591,11 @@ void ApplicationVolumeRender::UpdateVolumeTexture(const std::vector<uint16_t> &i
             m_pImmediateContext->CSSetSamplers(0, _countof(ppSamplerClear), ppSamplerClear);
             m_pAnnotation->EndEvent();
         }
+        std::cout << "Generate Mip Map." << std::endl;
         m_pImmediateContext->Flush();
     }
+
+    std::cout << "UpdateVolumeTexture Done." << std::endl;
 
     {
         DX::ComPtr<ID3D11Texture3D> pTextureGradient;
@@ -577,6 +636,8 @@ void ApplicationVolumeRender::UpdateVolumeTexture(const std::vector<uint16_t> &i
         }
         m_pImmediateContext->Flush();
     }
+
+    std::cout << "UpdateGradient Done." << std::endl;
 }
 
 void ApplicationVolumeRender::InitializeTransferFunction()
@@ -863,7 +924,6 @@ void ApplicationVolumeRender::Update(float deltaTime)
             {
                 // 计算Histogram
                 auto histogram = GetHistogram(intensity);
-                m_IsVolumeDataLoaded = true;
 
                 // 计算最小值和最大值
                 uint16_t min, max;
@@ -887,11 +947,18 @@ void ApplicationVolumeRender::Update(float deltaTime)
                     e = static_cast<uint16_t>(intensityNorm * std::numeric_limits<uint16_t>::max());
                 }
 
-                UpdateVolumeTexture(intensity, width, height, depth);
+                try
+                {
+                    UpdateVolumeTexture(intensity, width, height, depth);
+                }
+                catch (std::exception const &e)
+                {
+                    std::cout << "update volume data error " << e.what() << std::endl;
+                }
+
+                m_IsVolumeDataLoaded = false;
                 m_FrameIndex = 0;
             }
-
-            m_IsVolumeDataLoaded = false;
         }
 
         if (m_IsRecreateOpacityTexture) // 更新透明度映射表

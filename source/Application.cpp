@@ -161,7 +161,9 @@ void Application::Run()
         this->Update(this->CalculateFrameTime());
 
         ImGui_ImplDX11_NewFrame();
+
         ImGui_ImplGlfw_NewFrame();
+
         ImGui::NewFrame();
 
         const uint32_t frameIndex = m_pSwapChain->GetCurrentBackBufferIndex();
