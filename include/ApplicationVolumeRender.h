@@ -171,4 +171,6 @@ private:
 
     std::vector<double> m_HistogramData;
     bool m_IsHistogramUpdated = false;
+
+    bool m_IsFirstFrameAfterVolumeDataLoad = false;
 };

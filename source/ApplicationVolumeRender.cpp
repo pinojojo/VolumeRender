@@ -517,6 +517,8 @@ void ApplicationVolumeRender::UpdateVolumeTexture(const std::vector<uint16_t> &i
 
         m_pSRVGradient.Reset();
         m_pUAVGradient.Reset();
+        m_pImmediateContext->Flush();
+        this->WaitForGPU();
     }
 
     std::cout << "Clear old resources." << std::endl;
@@ -605,6 +607,7 @@ void ApplicationVolumeRender::UpdateVolumeTexture(const std::vector<uint16_t> &i
         }
         std::cout << "Generate Mip Map." << std::endl;
         m_pImmediateContext->Flush();
+        this->WaitForGPU();
     }
 
     std::cout << "UpdateVolumeTexture Done." << std::endl;
@@ -647,6 +650,7 @@ void ApplicationVolumeRender::UpdateVolumeTexture(const std::vector<uint16_t> &i
             m_pAnnotation->EndEvent();
         }
         m_pImmediateContext->Flush();
+        this->WaitForGPU();
     }
 
     std::cout << "UpdateGradient Done." << std::endl;
@@ -967,6 +971,7 @@ void ApplicationVolumeRender::Update(float deltaTime)
                     std::cout << "update volume data error " << e.what() << std::endl;
                 }
 
+                m_IsFirstFrameAfterVolumeDataLoad = true;
                 m_IsVolumeDataLoaded = false;
                 m_FrameIndex = 0;
             }
@@ -1064,6 +1069,11 @@ void ApplicationVolumeRender::TextureBlit(DX::ComPtr<ID3D11ShaderResourceView> p
 
 void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRTV)
 {
+    if (m_IsFirstFrameAfterVolumeDataLoad)
+    {
+        std::cout << "First Frame After Volume Data Load." << std::endl;
+        m_IsFirstFrameAfterVolumeDataLoad = false;
+    }
 
     ID3D11UnorderedAccessView *ppUAVClear[] = {nullptr, nullptr, nullptr, nullptr};
     ID3D11ShaderResourceView *ppSRVClear[] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
