@@ -29,26 +29,30 @@
 #include <Hawk/Math/Functions.hpp>
 #include <Hawk/Math/Converters.hpp>
 
-template<uint32_t N>
-struct PiecewiseFunction {
-    F32                RangeMin = -1024.0f;
-    F32                RangeMax = +3071.0f;
-    uint32_t           Count = 0;
+template <uint32_t N>
+struct PiecewiseFunction
+{
+    F32 RangeMin = -1024.0f;
+    F32 RangeMax = +65535.0f;
+    uint32_t Count = 0;
     std::array<F32, N> Position = {};
     std::array<F32, N> Value = {};
 };
 
-template<uint32_t N = 64>
-class PiecewiseLinearFunction :public PiecewiseFunction<N> {
+template <uint32_t N = 64>
+class PiecewiseLinearFunction : public PiecewiseFunction<N>
+{
 public:
-    void AddNode(F32 position, F32 value) {
+    void AddNode(F32 position, F32 value)
+    {
 
         this->Position[this->Count] = position;
         this->Value[this->Count] = value;
         this->Count++;
     }
 
-    F32 Evaluate(F32 positionNormalized) const {
+    F32 Evaluate(F32 positionNormalized) const
+    {
 
         auto position = positionNormalized * (this->RangeMax - this->RangeMin) + this->RangeMin;
 
@@ -61,7 +65,8 @@ public:
         if (position > this->RangeMax)
             return this->Value[this->Count - 1];
 
-        for (size_t i = 1; i < this->Count; i++) {
+        for (size_t i = 1; i < this->Count; i++)
+        {
             auto const p1 = this->Position[i - 1];
             auto const p2 = this->Position[i];
             auto const t = (position - p1) / (p2 - p1);
@@ -72,23 +77,26 @@ public:
         return 0.0f;
     }
 
-    void Clear() {
+    void Clear()
+    {
         this->Count = 0;
     }
 };
 
-class ScalarTransferFunction1D {
+class ScalarTransferFunction1D
+{
 public:
     void AddNode(F32 position, F32 value) { this->PLF.AddNode(position, value); }
 
     F32 Evaluate(F32 intensity) const { return this->PLF.Evaluate(intensity); }
 
-    DX::ComPtr<ID3D11ShaderResourceView> GenerateTexture(DX::ComPtr<ID3D11Device> pDevice, uint32_t sampling = 64) const {
+    DX::ComPtr<ID3D11ShaderResourceView> GenerateTexture(DX::ComPtr<ID3D11Device> pDevice, uint32_t sampling = 64) const
+    {
 
         std::vector<uint8_t> data(sampling);
         for (auto index = 0u; index < sampling; index++)
             data[index] = static_cast<uint8_t>(std::round(255.0f * this->Evaluate(index / static_cast<F32>(sampling - 1))));
-       
+
         D3D11_TEXTURE1D_DESC desc = {};
         desc.Width = sampling;
         desc.MipLevels = 1;
@@ -113,24 +121,29 @@ public:
     PiecewiseLinearFunction<> PLF;
 };
 
-class ColorTransferFunction1D {
+class ColorTransferFunction1D
+{
 public:
-    void AddNode(F32 position, Hawk::Math::Vec3 value) {
+    void AddNode(F32 position, Hawk::Math::Vec3 value)
+    {
 
         this->PLF[0].AddNode(position, value.x);
         this->PLF[1].AddNode(position, value.y);
         this->PLF[2].AddNode(position, value.z);
     }
 
-    Hawk::Math::Vec3 Evaluate(F32 intensity) const {
+    Hawk::Math::Vec3 Evaluate(F32 intensity) const
+    {
 
-        return Hawk::Math::Vec3{ this->PLF[0].Evaluate(intensity), this->PLF[1].Evaluate(intensity), this->PLF[2].Evaluate(intensity) };
+        return Hawk::Math::Vec3{this->PLF[0].Evaluate(intensity), this->PLF[1].Evaluate(intensity), this->PLF[2].Evaluate(intensity)};
     }
 
-    DX::ComPtr<ID3D11ShaderResourceView> GenerateTexture(DX::ComPtr<ID3D11Device> pDevice, uint32_t sampling = 64) {
+    DX::ComPtr<ID3D11ShaderResourceView> GenerateTexture(DX::ComPtr<ID3D11Device> pDevice, uint32_t sampling = 64)
+    {
 
         std::vector<Hawk::Math::Vector<uint8_t, 4>> data(sampling);
-        for (size_t index = 0; index < sampling; index++) {
+        for (size_t index = 0; index < sampling; index++)
+        {
             Hawk::Math::Vec3 v = this->Evaluate(index / static_cast<F32>(sampling - 1));
             const auto x = static_cast<uint8_t>(std::round(255.0f * v.x));
             const auto y = static_cast<uint8_t>(std::round(255.0f * v.y));
@@ -157,7 +170,8 @@ public:
         return pSRV;
     }
 
-    void Clear() {
+    void Clear()
+    {
 
         this->PLF[0].Clear();
         this->PLF[1].Clear();

@@ -246,6 +246,8 @@ void Application::InitializeD3D11()
         DX::ComPtr<IDXGIFactory6> pFactoryNew;
         pFactory.As(&pFactoryNew);
 
+        bool bFound = false;
+
         for (uint32_t adapterID = 0; DXGI_ERROR_NOT_FOUND != pFactoryNew->EnumAdapterByGpuPreference(adapterID, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&pAdapter)); adapterID++)
         {
             DXGI_ADAPTER_DESC1 desc = {};
@@ -255,8 +257,17 @@ void Application::InitializeD3D11()
                 continue;
 
             if (SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_11_1, __uuidof(ID3D12Device), nullptr)))
+            {
+                bFound = true;
                 break;
+            }
         }
+
+        if (!bFound)
+        {
+            std::cout << "Not Found High Performance Adapter" << std::endl;
+        }
+
         return pAdapter;
     };
 
@@ -336,6 +347,8 @@ void Application::InitializeD3D11()
     m_FenceEvent = CreateEvent(nullptr, false, false, nullptr);
     if (m_FenceEvent == nullptr)
         DX::ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
+
+    std::cout << "D3D11 Device Created" << std::endl;
 }
 
 void Application::InitializeImGUI()

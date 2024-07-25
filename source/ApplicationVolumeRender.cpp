@@ -1281,7 +1281,7 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
 
     if (ImGui::CollapsingHeader("TransferFunction", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        static double X_LIMIT_MAX = 5000.0;
+        static double X_LIMIT_MAX = 65536.0;
         static double X_LIMIT_MIN = 0.0;
         ImPlot::SetNextPlotLimitsX(X_LIMIT_MIN, X_LIMIT_MAX);
         ImPlot::SetNextPlotLimitsY(0.0f, 1.025f);
@@ -1298,49 +1298,17 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
                     histogramY.clear();
 
                     std::vector<double> histogramNormalized = m_HistogramData;
-                    // 找最大值
-                    double max = *std::max_element(histogramNormalized.begin(), histogramNormalized.end());
-                    // 归一化
-                    std::transform(histogramNormalized.begin(), histogramNormalized.end(), histogramNormalized.begin(), [max](double value)
+
+                    double max = *std::max_element(histogramNormalized.begin(), histogramNormalized.end()); // 找最大值
+
+                    std::transform(histogramNormalized.begin(), histogramNormalized.end(), histogramNormalized.begin(), [max](double value) // 归一化
                                    { return value / max; });
 
-                    // 生成直方图渲染数据
-                    static const int HISTOGRAM_SEGMENTS = 200; // 渲染时不可能显示所有的直方图数据，所以需要对直方图数据进行采样
-                    int samplesPerSegment = (X_LIMIT_MAX - X_LIMIT_MIN) / HISTOGRAM_SEGMENTS;
-
-                    for (int i = 0; i < HISTOGRAM_SEGMENTS; i++)
+                    for (size_t i = 0; i < histogramNormalized.size(); i++)
                     {
-                        // 找片段内的最大和最小，并且知道最大值的位置是前还是后
-                        int start = i * samplesPerSegment;
-                        int end = (i + 1) * samplesPerSegment;
-
-                        auto peakPos = std::max_element(histogramNormalized.begin() + start, histogramNormalized.begin() + end);
-                        auto peakIndex = std::distance(histogramNormalized.begin(), peakPos);
-
-                        auto valleyPos = std::min_element(histogramNormalized.begin() + start, histogramNormalized.begin() + end);
-                        auto valleyIndex = std::distance(histogramNormalized.begin(), valleyPos);
-
-                        if (peakIndex < valleyIndex)
-                        {
-                            histogramX.push_back(peakIndex);
-                            histogramY.push_back(*peakPos);
-                            histogramX.push_back(valleyIndex);
-                            histogramY.push_back(*valleyPos);
-                        }
-                        else
-                        {
-                            histogramX.push_back(valleyIndex);
-                            histogramY.push_back(*valleyPos);
-                            histogramX.push_back(peakIndex);
-                            histogramY.push_back(*peakPos);
-                        }
+                        histogramX.push_back(i);
+                        histogramY.push_back(histogramNormalized[i]);
                     }
-
-                    // 找 histogramY 的最大值，依据最大值整体缩放，知道最大值为1
-                    double maxHistogramY = *std::max_element(histogramY.begin(), histogramY.end());
-                    std::cout << "maxHistogramY: " << maxHistogramY << std::endl;
-                    std::transform(histogramY.begin(), histogramY.end(), histogramY.begin(), [maxHistogramY](double value)
-                                   { return value / maxHistogramY; });
 
                     m_IsHistogramUpdated = false;
                 }
