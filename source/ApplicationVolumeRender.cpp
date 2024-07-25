@@ -354,9 +354,6 @@ void ApplicationVolumeRender::InitializeVolumeTexture()
     fread(intensity.data(), sizeof(uint16_t), m_DimensionX * m_DimensionY * m_DimensionZ, pFile.get());
     m_DimensionMipLevels = static_cast<uint16_t>(std::ceil(std::log2(std::max(std::max(m_DimensionX, m_DimensionY), m_DimensionZ)))) + 1;
 
-#endif
-
-    std::cout << "UpdateVolumeTexture: " << m_DimensionX << " " << m_DimensionY << " " << m_DimensionZ << " " << m_DimensionMipLevels << std::endl;
     auto NormalizeIntensity = [](uint16_t intensity, uint16_t min, uint16_t max) -> uint16_t
     {
         return static_cast<uint16_t>(std::round(std::numeric_limits<uint16_t>::max() * ((intensity - min) / static_cast<F32>(max - min))));
@@ -366,6 +363,10 @@ void ApplicationVolumeRender::InitializeVolumeTexture()
     std::cout << "tmin: " << tmin << " tmax: " << tmax << std::endl;
     for (size_t index = 0u; index < std::size(intensity); index++)
         intensity[index] = NormalizeIntensity(intensity[index], tmin, tmax);
+
+#endif
+
+    std::cout << "UpdateVolumeTexture: " << m_DimensionX << " " << m_DimensionY << " " << m_DimensionZ << " " << m_DimensionMipLevels << std::endl;
 
     { // 统计直方图
         m_HistogramData = GetHistogram(intensity);
@@ -1366,8 +1367,27 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
                         }
                         else if (column == 1)
                         {
-                            double position = m_OpacityTransferFunc.PLF.Position[row];
-                            ImGui::Text("%d", int(position));
+                            static int position = m_OpacityTransferFunc.PLF.Position[row];
+                            position = m_OpacityTransferFunc.PLF.Position[row];
+
+                            int vMin = m_OpacityTransferFunc.PLF.RangeMin;
+                            int vMax = m_OpacityTransferFunc.PLF.RangeMax;
+
+                            if (row > 1)
+                                vMin = m_OpacityTransferFunc.PLF.Position[row - 1];
+
+                            if (row < m_OpacityTransferFunc.PLF.Count - 1)
+                                vMax = m_OpacityTransferFunc.PLF.Position[row + 1];
+
+                            ImGui::PushID(row * COLUMNS_COUNT + column);
+
+                            if (ImGui::SliderInt("##pos", &position, vMin, vMax))
+                            {
+                                m_OpacityTransferFunc.PLF.Position[row] = position;
+                                m_IsRecreateOpacityTexture = true;
+                            }
+
+                            ImGui::PopID();
                         }
                         else if (column == 2)
                         {
