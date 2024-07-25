@@ -984,6 +984,13 @@ void ApplicationVolumeRender::Update(float deltaTime)
             m_IsRecreateOpacityTexture = false;
             m_FrameIndex = 0;
         }
+
+        if (m_IsRecreateDiffuseTexture) // 更新漫反射映射表
+        {
+            m_pSRVDiffuseTF = m_DiffuseTransferFunc.GenerateTexture(m_pDevice, m_SamplingCount);
+            m_IsRecreateDiffuseTexture = false;
+            m_FrameIndex = 0;
+        }
     }
     catch (std::exception const &e)
     {
@@ -1440,14 +1447,13 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
 
         { // 颜色点编辑表格
             ImGuiTableFlags flags2 = ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_Borders;
-            static const int COLUMNS_COUNT = 6;
+            static const int COLUMNS_COUNT = 4;
             if (ImGui::BeginTable("table_colos", COLUMNS_COUNT, flags2))
             {
                 ImGui::TableSetupColumn("ID");
                 ImGui::TableSetupColumn("Intensity");
                 ImGui::TableSetupColumn("Diffuse");
                 ImGui::TableSetupColumn("Specular");
-                ImGui::TableSetupColumn("Emission");
 
                 ImGui::TableHeadersRow();
                 for (int row = 0; row < m_DiffuseTransferFunc.PLF[0].Count; row++)
@@ -1464,8 +1470,29 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
                         }
                         else if (column == 1)
                         {
-                            double position = m_DiffuseTransferFunc.PLF[0].Position[row];
-                            ImGui::Text("%d", int(position));
+                            static int position = m_DiffuseTransferFunc.PLF[0].Position[row];
+                            position = m_DiffuseTransferFunc.PLF[0].Position[row];
+
+                            int vMin = m_DiffuseTransferFunc.PLF[0].RangeMin;
+                            int vMax = m_DiffuseTransferFunc.PLF[0].RangeMax;
+
+                            if (row > 1)
+                                vMin = m_DiffuseTransferFunc.PLF[0].Position[row - 1];
+
+                            if (row < m_DiffuseTransferFunc.PLF[0].Count - 1)
+                                vMax = m_DiffuseTransferFunc.PLF[0].Position[row + 1];
+
+                            ImGui::PushID(row * COLUMNS_COUNT + column);
+
+                            if (ImGui::SliderInt("##pos", &position, vMin, vMax))
+                            {
+                                m_DiffuseTransferFunc.PLF[0].Position[row] = position; // red
+                                m_DiffuseTransferFunc.PLF[1].Position[row] = position; // green
+                                m_DiffuseTransferFunc.PLF[2].Position[row] = position; // blue
+                                m_IsRecreateDiffuseTexture = true;
+                            }
+
+                            ImGui::PopID();
                         }
                         else if (column == 2)
                         {
@@ -1482,20 +1509,6 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
                             double b = m_SpecularTransferFunc.PLF[2].Value[row];
 
                             ImGui::Text("%.2f,%.2f,%.2f", r, g, b);
-                        }
-                        else if (column == 4)
-                        {
-                            double r = m_EmissionTransferFunc.PLF[0].Value[row];
-                            double g = m_EmissionTransferFunc.PLF[1].Value[row];
-                            double b = m_EmissionTransferFunc.PLF[2].Value[row];
-
-                            ImGui::Text("%.2f,%.2f,%.2f", r, g, b);
-                        }
-                        else if (column == COLUMNS_COUNT - 1)
-                        {
-                            ImGui::PushID(row * COLUMNS_COUNT + column);
-                            ImGui::SmallButton("Delete");
-                            ImGui::PopID();
                         }
                     }
                 }
