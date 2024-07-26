@@ -1097,7 +1097,7 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
     if (m_FrameIndex < m_SampleDispersion)
     {
         ID3D11UnorderedAccessView *ppUAVResources[] = {m_pUAVDispersionTiles.Get()};
-        constexpr uint32_t pCounters[] = {0};
+        constexpr uint32_t pCounters[] = {0}; // 通常伴随UAV可以设置一个计数器，用于原子操作
 
         m_pAnnotation->BeginEvent(L"Render Pass: Reset computed tiles");
         m_PSOResetTiles.Apply(m_pImmediateContext);
@@ -1135,7 +1135,7 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
     m_pImmediateContext->CopyStructureCount(m_pDrawInstancedIndirectBufferArgs.Get(), 0, m_pUAVDispersionTiles.Get());
     m_pAnnotation->EndEvent();
 
-    {
+    { // 生成光线
         ID3D11SamplerState *ppSamplers[] = {
             m_pSamplerPoint.Get(),
             m_pSamplerLinear.Get(),
@@ -1167,7 +1167,7 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
         m_pAnnotation->EndEvent();
     }
 
-    {
+    { // 计算辐射度
         ID3D11SamplerState *ppSamplers[] = {
             m_pSamplerPoint.Get(),
             m_pSamplerLinear.Get(),
@@ -1197,7 +1197,7 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
         m_pAnnotation->EndEvent();
     }
 
-    {
+    { // 累积辐射度
         ID3D11ShaderResourceView *ppSRVResources[] = {m_pSRVRadiance.Get(), m_pSRVDispersionTiles.Get()};
         ID3D11UnorderedAccessView *ppUAVResources[] = {m_pUAVColorSum.Get()};
 
@@ -1211,7 +1211,7 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
         m_pAnnotation->EndEvent();
     }
 
-    {
+    { // 色调映射
         ID3D11ShaderResourceView *ppSRVResources[] = {m_pSRVColorSum.Get(), m_pSRVDispersionTiles.Get()};
         ID3D11UnorderedAccessView *ppUAVResources[] = {m_pUAVToneMap.Get()};
 
@@ -1248,7 +1248,8 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
         m_pImmediateContext->OMSetRenderTargets(0, nullptr, nullptr);
         m_pAnnotation->EndEvent();
     }
-    m_FrameIndex++;
+
+       m_FrameIndex++;
 }
 
 void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
