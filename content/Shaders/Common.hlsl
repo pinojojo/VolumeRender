@@ -128,11 +128,12 @@ float2 ScreenSpaceToNDC(float2 pixel, float2 invDimension)
     return float2(ndc.x, -ndc.y);
 }
 
+// 可以根据Intersection的min和max的值来判断是否和AABB盒子相交
 Intersection IntersectAABB(Ray ray, AABB aabb)
 {
     Intersection intersect = { +FLT_MAX, -FLT_MAX };
 
-    const float3 invR = rcp(ray.Direction);
+    const float3 invR = rcp(ray.Direction); // 分母
     const float3 bot = invR * (aabb.Min - ray.Origin);
     const float3 top = invR * (aabb.Max - ray.Origin);
     const float3 tmin = min(top, bot);
@@ -142,7 +143,7 @@ Intersection IntersectAABB(Ray ray, AABB aabb)
     const float largestMax = Min3(tmax.x, tmax.y, tmax.z);
     
     intersect.Min = largestMin;
-    intersect.Max = largestMax;
+    intersect.Max = largestMax; 
     return intersect;
 }
 

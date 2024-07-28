@@ -110,6 +110,7 @@ private:
     DX::GraphicsPSO m_PSODefault = {};
     DX::GraphicsPSO m_PSOBlit = {};
     DX::GraphicsPSO m_PSODegugTiles = {};
+    DX::GraphicsPSO m_PSOGridLine = {};
 
     DX::ComputePSO m_PSOGeneratePrimaryRays = {};
     DX::ComputePSO m_PSOComputeDiffuseLight = {};
@@ -128,6 +129,7 @@ private:
     DX::ComPtr<ID3D11Buffer> m_pConstantBufferFrame;
     DX::ComPtr<ID3D11Buffer> m_pDispatchIndirectBufferArgs;
     DX::ComPtr<ID3D11Buffer> m_pDrawInstancedIndirectBufferArgs;
+    DX::ComPtr<ID3D11Buffer> m_pGridLineVertexBuffer; // 用于渲染网格线
 
     ColorTransferFunction1D m_DiffuseTransferFunc;
     ColorTransferFunction1D m_SpecularTransferFunc;

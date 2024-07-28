@@ -34,6 +34,7 @@
 #include <dxgi1_6.h>
 #include <d3d11_1.h>
 #include <d3d11on12.h>
+#include <DirectXMath.h>
 #include <wrl.h>
 
 // #define WINDOWLESS
@@ -42,6 +43,12 @@
 
 namespace DX
 {
+    struct Vertex
+    {
+        DirectX::XMFLOAT3 position;
+        DirectX::XMFLOAT4 color;
+    };
+
     template <typename T>
     using ComPtr = Microsoft::WRL::ComPtr<T>;
 

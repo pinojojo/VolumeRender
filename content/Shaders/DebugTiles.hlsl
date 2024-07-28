@@ -56,7 +56,7 @@ InputOutput GenerateOutputGS(float2 screenCoord)
 void DebugTilesGS(point InputOutput input[1], inout LineStream<InputOutput> stream)
 {
     
-    float offsetX = (THREAD_GROUP_SIZE_X) * FrameBuffer.InvRenderTargetDim.x; // 这里为什么不乘0.5是因为我们需要的是NDC坐标
+    float offsetX = (THREAD_GROUP_SIZE_X) * FrameBuffer.InvRenderTargetDim.x; // 这里为什么不乘0.5是因为NDC坐标和屏幕坐标正好有一个0.5倍的关系
     float offsetY = (THREAD_GROUP_SIZE_Y) * FrameBuffer.InvRenderTargetDim.y;
 
     float2 x = input[0].Position.xy + float2(-offsetX, +offsetY) + float2(-FrameBuffer.InvRenderTargetDim.x, +FrameBuffer.InvRenderTargetDim.y);

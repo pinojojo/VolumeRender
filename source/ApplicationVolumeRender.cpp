@@ -303,11 +303,17 @@ void ApplicationVolumeRender::InitializeShaders()
     auto pBlobCSComputeGradient = compileShader(L"content/Shaders/ComputeGradient.hlsl", "ComputeGradient", "cs_5_0", macros);
     auto pBlobCSGenerateMipLevel = compileShader(L"content/Shaders/ComputeLevelOfDetail.hlsl", "GenerateMipLevel", "cs_5_0", macros);
     auto pBlobCSResetTiles = compileShader(L"content/Shaders/ComputeTiles.hlsl", "ResetTiles", "cs_5_0", macros);
+
     auto pBlobVSTextureBlit = compileShader(L"content/Shaders/TextureBlit.hlsl", "BlitVS", "vs_5_0", macros);
     auto pBlobPSTextureBlit = compileShader(L"content/Shaders/TextureBlit.hlsl", "BlitPS", "ps_5_0", macros);
+
     auto pBlobVSDebugTiles = compileShader(L"content/Shaders/DebugTiles.hlsl", "DebugTilesVS", "vs_5_0", macros);
     auto pBlobGSDebugTiles = compileShader(L"content/Shaders/DebugTiles.hlsl", "DebugTilesGS", "gs_5_0", macros);
     auto pBlobPSDegugTiles = compileShader(L"content/Shaders/DebugTiles.hlsl", "DebugTilesPS", "ps_5_0", macros);
+
+    auto pBlobVSGridLine = compileShader(L"content/Shaders/RenderLine.hlsl", "RenderLineVS", "vs_5_0", macros);
+    auto pBlobGSGridLine = compileShader(L"content/Shaders/RenderLine.hlsl", "RenderLineGS", "gs_5_0", macros);
+    auto pBlobPSGridLine = compileShader(L"content/Shaders/RenderLine.hlsl", "RenderLinePS", "ps_5_0", macros);
 
     DX::ThrowIfFailed(m_pDevice->CreateComputeShader(pBlobCSGeneratePrimaryRays->GetBufferPointer(), pBlobCSGeneratePrimaryRays->GetBufferSize(), nullptr, m_PSOGeneratePrimaryRays.pCS.ReleaseAndGetAddressOf()));
     DX::ThrowIfFailed(m_pDevice->CreateComputeShader(pBlobCSComputeDiffuseLight->GetBufferPointer(), pBlobCSComputeDiffuseLight->GetBufferSize(), nullptr, m_PSOComputeDiffuseLight.pCS.ReleaseAndGetAddressOf()));
@@ -326,6 +332,11 @@ void ApplicationVolumeRender::InitializeShaders()
     DX::ThrowIfFailed(m_pDevice->CreateGeometryShader(pBlobGSDebugTiles->GetBufferPointer(), pBlobGSDebugTiles->GetBufferSize(), nullptr, m_PSODegugTiles.pGS.ReleaseAndGetAddressOf()));
     DX::ThrowIfFailed(m_pDevice->CreatePixelShader(pBlobPSDegugTiles->GetBufferPointer(), pBlobPSDegugTiles->GetBufferSize(), nullptr, m_PSODegugTiles.pPS.ReleaseAndGetAddressOf()));
     m_PSODegugTiles.PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
+
+    DX::ThrowIfFailed(m_pDevice->CreateVertexShader(pBlobVSGridLine->GetBufferPointer(), pBlobVSGridLine->GetBufferSize(), nullptr, m_PSOGridLine.pVS.ReleaseAndGetAddressOf()));
+    DX::ThrowIfFailed(m_pDevice->CreateGeometryShader(pBlobGSGridLine->GetBufferPointer(), pBlobGSGridLine->GetBufferSize(), nullptr, m_PSOGridLine.pGS.ReleaseAndGetAddressOf()));
+    DX::ThrowIfFailed(m_pDevice->CreatePixelShader(pBlobPSGridLine->GetBufferPointer(), pBlobPSGridLine->GetBufferSize(), nullptr, m_PSOGridLine.pPS.ReleaseAndGetAddressOf()));
+    m_PSOGridLine.PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
 }
 
 void ApplicationVolumeRender::InitializeVolumeTexture()
@@ -856,6 +867,12 @@ void ApplicationVolumeRender::InitializeBuffers()
     m_pConstantBufferFrame = DX::CreateConstantBuffer<FrameBuffer>(m_pDevice);
     m_pDispatchIndirectBufferArgs = DX::CreateIndirectBuffer<DispatchIndirectBuffer>(m_pDevice, DispatchIndirectBuffer{1, 1, 1});
     m_pDrawInstancedIndirectBufferArgs = DX::CreateIndirectBuffer<DrawInstancedIndirectBuffer>(m_pDevice, DrawInstancedIndirectBuffer{0, 1, 0, 0});
+
+    // 创建GridLine所需的buffer，并且默认填充两条线的顶点
+    std::vector<DX::Vertex> demoVertices = {
+        {DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f), DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f)},
+        {DirectX::XMFLOAT3(1.0f, 1.0f, 0.0f), DirectX::XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f)}};
+    m_pGridLineVertexBuffer = DX::CreateStructuredBuffer<DX::Vertex>(m_pDevice, demoVertices.size(), false, true, demoVertices.data());
 }
 
 void ApplicationVolumeRender::InitializeTileBuffer()
@@ -997,7 +1014,7 @@ void ApplicationVolumeRender::Update(float deltaTime)
         std::cout << e.what() << std::endl;
     }
 
-    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 0.7f * m_DimensionZ};
+    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 0.9f * m_DimensionZ};
     scaleVector /= (std::max)({scaleVector.x, scaleVector.y, scaleVector.z});
 
     Hawk::Math::Mat4x4 V = m_Camera.ToMatrix();
