@@ -40,7 +40,7 @@ float2 ScreenSpaceToNDC(float2 pixel)
 
 void DebugTilesVS(uint id : SV_VertexID, out InputOutput output)
 {
-    uint2 pixel = GetThreadIDFromTileList(BufferDispersionTiles, id, uint2(THREAD_GROUP_SIZE_X / 2, THREAD_GROUP_SIZE_Y / 2));
+    uint2 pixel = GetThreadIDFromTileList(BufferDispersionTiles, id, uint2(THREAD_GROUP_SIZE_X / 2, THREAD_GROUP_SIZE_Y / 2)); // 返回tile中心的像素坐标
     output.Position = float4(ScreenSpaceToNDC(float2(pixel.x, pixel.y)), 0.0, 1.0);
 }
 
@@ -51,13 +51,14 @@ InputOutput GenerateOutputGS(float2 screenCoord)
     return result;
 }
 
-
+// 最多输出5个顶点，输出线条流
 [maxvertexcount(5)]
 void DebugTilesGS(point InputOutput input[1], inout LineStream<InputOutput> stream)
 {
-    float offsetX = (THREAD_GROUP_SIZE_X) * FrameBuffer.InvRenderTargetDim.x;
-    float offsetY = (THREAD_GROUP_SIZE_Y) * FrameBuffer.InvRenderTargetDim.y;
     
+    float offsetX = (THREAD_GROUP_SIZE_X) * FrameBuffer.InvRenderTargetDim.x; // 这里为什么不乘0.5是因为我们需要的是NDC坐标
+    float offsetY = (THREAD_GROUP_SIZE_Y) * FrameBuffer.InvRenderTargetDim.y;
+
     float2 x = input[0].Position.xy + float2(-offsetX, +offsetY) + float2(-FrameBuffer.InvRenderTargetDim.x, +FrameBuffer.InvRenderTargetDim.y);
     float2 y = input[0].Position.xy + float2(+offsetX, +offsetY);
     float2 z = input[0].Position.xy + float2(+offsetX, -offsetY);

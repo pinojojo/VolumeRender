@@ -1130,6 +1130,7 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
     m_pImmediateContext->ClearUnorderedAccessViewFloat(m_pUAVRadiance.Get(), clearColor);
     m_pAnnotation->EndEvent();
 
+    // 获取Tiles计数器的值
     m_pAnnotation->BeginEvent(L"Render Pass: Copy counters of tiles");
     m_pImmediateContext->CopyStructureCount(m_pDispatchIndirectBufferArgs.Get(), 0, m_pUAVDispersionTiles.Get());
     m_pImmediateContext->CopyStructureCount(m_pDrawInstancedIndirectBufferArgs.Get(), 0, m_pUAVDispersionTiles.Get());
@@ -1229,6 +1230,7 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
     this->TextureBlit(m_pSRVToneMap, pRTV);
     m_pAnnotation->EndEvent();
 
+    // 渲染tiles线
     if (m_IsDrawDebugTiles)
     {
         ID3D11ShaderResourceView *ppSRVResources[] = {m_pSRVDispersionTiles.Get()};
@@ -1249,7 +1251,7 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
         m_pAnnotation->EndEvent();
     }
 
-       m_FrameIndex++;
+    m_FrameIndex++;
 }
 
 void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
