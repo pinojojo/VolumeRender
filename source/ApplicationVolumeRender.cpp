@@ -312,7 +312,6 @@ void ApplicationVolumeRender::InitializeShaders()
     auto pBlobPSDegugTiles = compileShader(L"content/Shaders/DebugTiles.hlsl", "DebugTilesPS", "ps_5_0", macros);
 
     auto pBlobVSGridLine = compileShader(L"content/Shaders/RenderLine.hlsl", "RenderLineVS", "vs_5_0", macros);
-    auto pBlobGSGridLine = compileShader(L"content/Shaders/RenderLine.hlsl", "RenderLineGS", "gs_5_0", macros);
     auto pBlobPSGridLine = compileShader(L"content/Shaders/RenderLine.hlsl", "RenderLinePS", "ps_5_0", macros);
 
     DX::ThrowIfFailed(m_pDevice->CreateComputeShader(pBlobCSGeneratePrimaryRays->GetBufferPointer(), pBlobCSGeneratePrimaryRays->GetBufferSize(), nullptr, m_PSOGeneratePrimaryRays.pCS.ReleaseAndGetAddressOf()));
@@ -334,9 +333,8 @@ void ApplicationVolumeRender::InitializeShaders()
     m_PSODegugTiles.PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
 
     DX::ThrowIfFailed(m_pDevice->CreateVertexShader(pBlobVSGridLine->GetBufferPointer(), pBlobVSGridLine->GetBufferSize(), nullptr, m_PSOGridLine.pVS.ReleaseAndGetAddressOf()));
-    DX::ThrowIfFailed(m_pDevice->CreateGeometryShader(pBlobGSGridLine->GetBufferPointer(), pBlobGSGridLine->GetBufferSize(), nullptr, m_PSOGridLine.pGS.ReleaseAndGetAddressOf()));
     DX::ThrowIfFailed(m_pDevice->CreatePixelShader(pBlobPSGridLine->GetBufferPointer(), pBlobPSGridLine->GetBufferSize(), nullptr, m_PSOGridLine.pPS.ReleaseAndGetAddressOf()));
-    m_PSOGridLine.PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
+    m_PSOGridLine.PrimitiveTopology = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
 }
 
 void ApplicationVolumeRender::InitializeVolumeTexture()
@@ -1092,6 +1090,33 @@ void ApplicationVolumeRender::TextureBlit(DX::ComPtr<ID3D11ShaderResourceView> p
     m_pImmediateContext->PSSetShaderResources(0, _countof(ppSRVClear), ppSRVClear);
 }
 
+void ApplicationVolumeRender::DrawGridLine(DX::ComPtr<ID3D11RenderTargetView> pDst)
+{
+    ID3D11ShaderResourceView *ppSRVClear[] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    D3D11_VIEWPORT viewport = {0.0f, 0.0f, static_cast<float>(m_ApplicationDesc.Width), static_cast<float>(m_ApplicationDesc.Height), 0.0f, 1.0f};
+    D3D11_RECT scissor = {0, 0, static_cast<int32_t>(m_ApplicationDesc.Width), static_cast<int32_t>(m_ApplicationDesc.Height)};
+
+    // 设置渲染目标、裁剪矩形和视口
+    m_pImmediateContext->OMSetRenderTargets(1, pDst.GetAddressOf(), nullptr);
+    m_pImmediateContext->RSSetScissorRects(1, &scissor);
+    m_pImmediateContext->RSSetViewports(1, &viewport);
+
+    // 绑定PSO
+    m_PSOGridLine.Apply(m_pImmediateContext);
+
+    // 执行
+    m_pImmediateContext->Draw(6, 0);
+
+    // 解绑RTV
+    m_pImmediateContext->OMSetRenderTargets(0, nullptr, nullptr);
+    m_pImmediateContext->RSSetScissorRects(0, nullptr);
+    m_pImmediateContext->RSSetViewports(0, nullptr);
+
+    // 解绑PSO以及资源
+    m_PSODefault.Apply(m_pImmediateContext);
+    m_pImmediateContext->PSSetShaderResources(0, _countof(ppSRVClear), ppSRVClear);
+}
+
 void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRTV)
 {
     if (m_IsFirstFrameAfterVolumeDataLoad)
@@ -1246,6 +1271,8 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
     m_pAnnotation->BeginEvent(L"Render Pass: TextureBlit [Tone Map] -> [Back Buffer]");
     this->TextureBlit(m_pSRVToneMap, pRTV);
     m_pAnnotation->EndEvent();
+
+    this->DrawGridLine(pRTV);
 
     // 渲染tiles线
     if (m_IsDrawDebugTiles)

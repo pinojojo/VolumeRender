@@ -32,7 +32,7 @@ struct ApplicationDesc
     uint32_t Width = 800;
     uint32_t Height = 600;
     bool IsFullScreen = false;
-    bool IsVSync = false;
+    bool IsVSync = true;
 };
 
 struct GLFWwindow;

@@ -1,55 +1,50 @@
 #include "Common.hlsl"
 
-struct VS_Input
+// 顶点结构体，包含位置和颜色
+struct VertexOutput
 {
-    float3 position : POSITION;
+    float4 position : SV_Position;
     float4 color : COLOR;
 };
 
-struct GS_INPUT
+// ID代表第几个要渲染的线段
+void RenderLineVS(uint id : SV_VertexID, out VertexOutput output)
 {
-    float4 position : SV_POSITION;   
-    float4 color : COLOR;      
-};
+    float3 unicoord;
+    float4 color;
 
+    if (id == 0 || id == 2 || id == 4)
+    {
+        unicoord = float3(0, 0, 0);
 
-struct PS_Input
-{
-    float4 position : SV_POSITION;
-    float4 color : COLOR;
-};
+        if (id == 0)
+            color = float4(1.0, 0.0, 0.0, 1.0);
+        else if (id == 2)
+            color = float4(0.0, 1.0, 0.0, 1.0);
+        else if (id == 4)
+            color = float4(0.0, 0.0, 1.0, 1.0);
+    }
+    else if (id == 1)
+    {
+        unicoord = float3(1, 0, 0);
+        color = float4(1.0, 0.0, 0.0, 1.0);
+    }
+    else if (id == 3)
+    {
+        unicoord = float3(0, 1, 0);
+        color = float4(0.0, 1.0, 0.0, 1.0);
+    }
+    else if (id == 5)
+    {
+        unicoord = float3(0, 0, 1);
+        color = float4(0.0, 0.0, 1.0, 1.0);
+    }
 
-GS_INPUT RenderLineVS(VS_Input input)
-{
-    GS_INPUT output;
-
-    float4 worldPosition = float4(input.position, 1.0f);
-
-    output.position = mul(worldPosition, FrameBuffer.ViewProjectionMatrix);
-    output.color = input.color;
-    
-    return output;
+    output.position = mul(float4(unicoord, 1.0), FrameBuffer.ViewProjectionMatrix);
+    output.color = color;
 }
 
-[maxvertexcount(2)]
-void RenderLineGS(point GS_INPUT input[1], inout LineStream<PS_Input> OutputStream)
-{
-    PS_Input output;
-
-    // 直接传递第一个顶点
-    output.position = input[0].position;
-    output.color = input[0].color;
-    OutputStream.Append(output);
-
-    // 直接传递第二个顶点
-    output.position = input[0].position + float4(1.0f, 0.0f, 0.0f, 0.0f);
-    output.color = input[0].color;
-    OutputStream.Append(output);
-
-    OutputStream.RestartStrip();  // 重启图元组装，准备下一对顶点（如果有的话）
-}
-
-float4 RenderLinePS(PS_Input input) : SV_TARGET
+float4 RenderLinePS(VertexOutput input) : SV_TARGET0
 {
     return input.color;
 }

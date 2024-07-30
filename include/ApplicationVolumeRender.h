@@ -70,6 +70,8 @@ private:
 
     void TextureBlit(DX::ComPtr<ID3D11ShaderResourceView> pSrc, DX::ComPtr<ID3D11RenderTargetView> pDst);
 
+    void DrawGridLine(DX::ComPtr<ID3D11RenderTargetView> pDst);
+
 private:
     using D3D11ArrayUnorderedAccessView = std::vector<DX::ComPtr<ID3D11UnorderedAccessView>>;
     using D3D11ArrayShadeResourceView = std::vector<DX::ComPtr<ID3D11ShaderResourceView>>;
@@ -130,6 +132,8 @@ private:
     DX::ComPtr<ID3D11Buffer> m_pDispatchIndirectBufferArgs;
     DX::ComPtr<ID3D11Buffer> m_pDrawInstancedIndirectBufferArgs;
     DX::ComPtr<ID3D11Buffer> m_pGridLineVertexBuffer; // 用于渲染网格线
+
+    DX::ComPtr<ID3D11InputLayout> m_pGridLineInputLayout; // 用于渲染网格线的着色器的输入布局
 
     ColorTransferFunction1D m_DiffuseTransferFunc;
     ColorTransferFunction1D m_SpecularTransferFunc;
