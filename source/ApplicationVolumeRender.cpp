@@ -1107,7 +1107,29 @@ void ApplicationVolumeRender::TextureBlit(DX::ComPtr<ID3D11ShaderResourceView> p
     D3D11_VIEWPORT viewport = {0.0f, 0.0f, static_cast<float>(m_ApplicationDesc.Width), static_cast<float>(m_ApplicationDesc.Height), 0.0f, 1.0f};
     D3D11_RECT scissor = {0, 0, static_cast<int32_t>(m_ApplicationDesc.Width), static_cast<int32_t>(m_ApplicationDesc.Height)};
 
-    m_pImmediateContext->OMSetRenderTargets(1, pDst.GetAddressOf(), nullptr);
+    { // 清深度缓冲
+
+        D3D11_DEPTH_STENCIL_DESC dsDesc;
+        ZeroMemory(&dsDesc, sizeof(dsDesc));
+        dsDesc.DepthEnable = TRUE;
+        dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+        dsDesc.DepthFunc = D3D11_COMPARISON_LESS;
+        dsDesc.StencilEnable = FALSE;
+
+        ID3D11DepthStencilState *pDSState;
+        m_pDevice->CreateDepthStencilState(&dsDesc, &pDSState);
+        m_pImmediateContext->OMSetDepthStencilState(pDSState, 1);
+    }
+
+    { // 清颜色缓冲
+
+        float clearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        m_pImmediateContext->ClearRenderTargetView(pDst.Get(), clearColor);
+    }
+
+    m_pImmediateContext->ClearDepthStencilView(m_pDSV.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
+    m_pImmediateContext->OMSetRenderTargets(1, pDst.GetAddressOf(), m_pDSV.Get());
+    // m_pImmediateContext->OMSetRenderTargets(1, pDst.GetAddressOf(), nullptr);
     m_pImmediateContext->RSSetScissorRects(1, &scissor);
     m_pImmediateContext->RSSetViewports(1, &viewport);
 
@@ -1137,7 +1159,7 @@ void ApplicationVolumeRender::DrawGridLine(DX::ComPtr<ID3D11RenderTargetView> pD
     D3D11_RECT scissor = {0, 0, static_cast<int32_t>(m_ApplicationDesc.Width), static_cast<int32_t>(m_ApplicationDesc.Height)};
 
     // 设置渲染目标、裁剪矩形和视口
-    m_pImmediateContext->OMSetRenderTargets(1, pDst.GetAddressOf(), nullptr);
+    m_pImmediateContext->OMSetRenderTargets(1, pDst.GetAddressOf(), m_pDSV.Get());
 
     m_pImmediateContext->RSSetViewports(1, &viewport);
 

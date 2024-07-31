@@ -36,8 +36,10 @@ void BlitVS(uint id : SV_VertexID, out VertexOutput output)
 {
     float2 texcoord = float2((id << 1) & 2, id & 2);
     output.texcoord = texcoord;
-    output.position = float4(texcoord * float2(2, -2) + float2(-1, 1), 0.5, 1);
-    output.depth = 1.0;
+    float4 position = float4(texcoord * float2(2, -2) + float2(-1, 1), 0.5, 1);
+    output.position = position * float4(0.5, 0.5, 0.5, 1);
+
+    output.depth = 0.1;
 }
 
 struct PixelOutput
