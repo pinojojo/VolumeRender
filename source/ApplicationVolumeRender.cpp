@@ -744,7 +744,7 @@ void ApplicationVolumeRender::InitializeSamplerStates()
 void ApplicationVolumeRender::InitializeRenderTextures()
 {
 
-    {
+    { // 散射纹理
         D3D11_TEXTURE2D_DESC desc = {};
         desc.ArraySize = 1;
         desc.MipLevels = 1;
@@ -761,7 +761,7 @@ void ApplicationVolumeRender::InitializeRenderTextures()
         DX::ThrowIfFailed(m_pDevice->CreateUnorderedAccessView(pTextureDiffuse.Get(), nullptr, m_pUAVDiffuse.ReleaseAndGetAddressOf()));
     }
 
-    {
+    { // 镜面反射纹理
         D3D11_TEXTURE2D_DESC desc = {};
         desc.ArraySize = 1;
         desc.MipLevels = 1;
@@ -778,7 +778,7 @@ void ApplicationVolumeRender::InitializeRenderTextures()
         DX::ThrowIfFailed(m_pDevice->CreateUnorderedAccessView(pTextureSpecular.Get(), nullptr, m_pUAVSpecular.ReleaseAndGetAddressOf()));
     }
 
-    {
+    { // 辐射度纹理
         D3D11_TEXTURE2D_DESC desc = {};
         desc.ArraySize = 1;
         desc.MipLevels = 1;
@@ -795,7 +795,7 @@ void ApplicationVolumeRender::InitializeRenderTextures()
         DX::ThrowIfFailed(m_pDevice->CreateUnorderedAccessView(pTextureDiffuseLight.Get(), nullptr, m_pUAVRadiance.ReleaseAndGetAddressOf()));
     }
 
-    {
+    { // 法线纹理
         D3D11_TEXTURE2D_DESC desc = {};
         desc.ArraySize = 1;
         desc.MipLevels = 1;
@@ -812,7 +812,7 @@ void ApplicationVolumeRender::InitializeRenderTextures()
         DX::ThrowIfFailed(m_pDevice->CreateUnorderedAccessView(pTextureNormal.Get(), nullptr, m_pUAVNormal.ReleaseAndGetAddressOf()));
     }
 
-    {
+    { // 深度纹理
         D3D11_TEXTURE2D_DESC desc = {};
         desc.ArraySize = 1;
         desc.MipLevels = 1;
@@ -829,7 +829,7 @@ void ApplicationVolumeRender::InitializeRenderTextures()
         DX::ThrowIfFailed(m_pDevice->CreateUnorderedAccessView(pTextureDepth.Get(), nullptr, m_pUAVDepth.ReleaseAndGetAddressOf()));
     }
 
-    {
+    { // 颜色和光照的累加纹理
         D3D11_TEXTURE2D_DESC desc = {};
         desc.ArraySize = 1;
         desc.MipLevels = 1;
@@ -846,7 +846,7 @@ void ApplicationVolumeRender::InitializeRenderTextures()
         DX::ThrowIfFailed(m_pDevice->CreateUnorderedAccessView(pTextureColorSum.Get(), nullptr, m_pUAVColorSum.ReleaseAndGetAddressOf()));
     }
 
-    {
+    { // 调色纹理
         D3D11_TEXTURE2D_DESC desc = {};
         desc.ArraySize = 1;
         desc.MipLevels = 1;
@@ -1138,7 +1138,7 @@ void ApplicationVolumeRender::DrawGridLine(DX::ComPtr<ID3D11RenderTargetView> pD
 
     // 设置渲染目标、裁剪矩形和视口
     m_pImmediateContext->OMSetRenderTargets(1, pDst.GetAddressOf(), nullptr);
-    m_pImmediateContext->RSSetScissorRects(1, &scissor);
+
     m_pImmediateContext->RSSetViewports(1, &viewport);
 
     // 绑定PSO
@@ -1149,7 +1149,6 @@ void ApplicationVolumeRender::DrawGridLine(DX::ComPtr<ID3D11RenderTargetView> pD
 
     // 解绑RTV
     m_pImmediateContext->OMSetRenderTargets(0, nullptr, nullptr);
-    m_pImmediateContext->RSSetScissorRects(0, nullptr);
     m_pImmediateContext->RSSetViewports(0, nullptr);
 
     // 解绑PSO以及资源
@@ -1308,9 +1307,12 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
         m_pAnnotation->EndEvent();
     }
 
+    // 贴到后台缓冲区
     m_pAnnotation->BeginEvent(L"Render Pass: TextureBlit [Tone Map] -> [Back Buffer]");
     this->TextureBlit(m_pSRVToneMap, pRTV);
     m_pAnnotation->EndEvent();
+
+    // 渲染到后台缓冲区
     this->DrawGridLine(pRTV);
 
     // 渲染tiles线

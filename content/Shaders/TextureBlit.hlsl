@@ -25,13 +25,31 @@
 Texture2D<float4> TextureSrc : register(t0);
 SamplerState SamplerPoint : register(s0);
 
-void BlitVS(uint id : SV_VertexID, out float4 position : SV_Position, out float2 texcoord : TEXCOORD)
+struct VertexOutput
 {
-    texcoord = float2((id << 1) & 2, id & 2);
-    position = float4(texcoord * float2(2, -2) + float2(-1, 1), 0.5, 1);
+    float4 position : SV_Position;
+    float2 texcoord : TEXCOORD;
+    float depth : TEXCOORD1; // 用于传递深度值
+};
+
+void BlitVS(uint id : SV_VertexID, out VertexOutput output)
+{
+    float2 texcoord = float2((id << 1) & 2, id & 2);
+    output.texcoord = texcoord;
+    output.position = float4(texcoord * float2(2, -2) + float2(-1, 1), 0.5, 1);
+    output.depth = 1.0;
 }
 
-float4 BlitPS(float4 position : SV_Position, float2 texcoord : TEXCOORD) : SV_TARGET0
+struct PixelOutput
 {
-    return TextureSrc.Sample(SamplerPoint, texcoord);
+    float4 color : SV_Target;
+    float depth : SV_Depth;
+};
+
+PixelOutput BlitPS(VertexOutput input)
+{
+    PixelOutput output;
+    output.color = TextureSrc.Sample(SamplerPoint, input.texcoord);
+    output.depth = input.depth; // 输出手动设置的深度值
+    return output;
 }

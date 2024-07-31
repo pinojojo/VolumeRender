@@ -64,8 +64,10 @@ void Application::Resize(int32_t width, int32_t height)
     if (width == 0 || width == 0)
         return;
 
+    // 解除绑定任何RTV和DSV
     m_pImmediateContext->OMSetRenderTargets(0, nullptr, nullptr);
 
+    // 释放RTV关联资源
     for (uint32_t frameID = 0; frameID < FrameCount; frameID++)
     {
         m_pRTV[frameID].Reset();
@@ -74,13 +76,19 @@ void Application::Resize(int32_t width, int32_t height)
         m_pD3D12BackBuffers[frameID].Reset();
     }
 
+    // 释放DSV关联资源
+    m_pDSV.Reset();
+    m_pDepthStencil.Reset();
+
     m_pImmediateContext->Flush();
     this->WaitForGPU();
 
+    // 调整交换链对应的buffer的大小
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
     DX::ThrowIfFailed(m_pSwapChain->GetDesc1(&swapChainDesc));
     DX::ThrowIfFailed(m_pSwapChain->ResizeBuffers(FrameCount, width, height, swapChainDesc.Format, swapChainDesc.BufferUsage));
 
+    // 重新根据调整过大小的buffer来创建RTV
     for (uint32_t frameID = 0; frameID < FrameCount; frameID++)
     {
         DX::ThrowIfFailed(m_pSwapChain->GetBuffer(frameID, IID_PPV_ARGS(&m_pD3D12BackBuffers[frameID])));
@@ -95,6 +103,30 @@ void Application::Resize(int32_t width, int32_t height)
         DX::ThrowIfFailed(m_pDevice->CreateRenderTargetView(m_pD3D11BackBuffers[frameID].Get(), &descRTV, m_pRTV[frameID].GetAddressOf()));
     }
 
+    // 重建深度缓冲纹理
+    D3D11_TEXTURE2D_DESC descDepth = {};
+    descDepth.Width = width;
+    descDepth.Height = height;
+    descDepth.MipLevels = 1;
+    descDepth.ArraySize = 1;
+    descDepth.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    descDepth.SampleDesc.Count = 1;
+    descDepth.SampleDesc.Quality = 0;
+    descDepth.Usage = D3D11_USAGE_DEFAULT;
+    descDepth.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    descDepth.CPUAccessFlags = 0;
+    descDepth.MiscFlags = 0;
+
+    DX::ThrowIfFailed(m_pDevice->CreateTexture2D(&descDepth, nullptr, m_pDepthStencil.GetAddressOf()));
+
+    // 重建DSV
+    D3D11_DEPTH_STENCIL_VIEW_DESC descDSV = {};
+    descDSV.Format = descDepth.Format;
+    descDSV.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+    descDSV.Texture2D.MipSlice = 0;
+    DX::ThrowIfFailed(m_pDevice->CreateDepthStencilView(m_pDepthStencil.Get(), &descDSV, m_pDSV.GetAddressOf()));
+
+    // 更新窗口大小
     m_ApplicationDesc.Width = width;
     m_ApplicationDesc.Height = height;
 }
@@ -168,9 +200,11 @@ void Application::Run()
 
         const uint32_t frameIndex = m_pSwapChain->GetCurrentBackBufferIndex();
 
+        // 两个调用确保 dummy 资源在 Direct3D 11 和 Direct3D 12 之间正确同步
         m_pD3D11On12Device->AcquireWrappedResources(m_pD3D11BackBuffersDummy[frameIndex].GetAddressOf(), 1);
         m_pD3D11On12Device->ReleaseWrappedResources(m_pD3D11BackBuffersDummy[frameIndex].GetAddressOf(), 1);
 
+        // 获取non-dummy资源, 用于渲染
         m_pD3D11On12Device->AcquireWrappedResources(m_pD3D11BackBuffers[frameIndex].GetAddressOf(), 1);
         this->RenderFrame(m_pRTV[frameIndex]);
 
@@ -188,7 +222,6 @@ void Application::Run()
             if (frameCounter == 100)
                 needToExit = true;
         }
-
 #endif
 
         this->RenderGUI(m_pRTV[frameIndex]);
@@ -322,24 +355,57 @@ void Application::InitializeD3D11()
         DX::ThrowIfFailed(pSwapChain.As(&m_pSwapChain));
     }
 
-    { // 在D3D12设备上创建D3D11设备，好处是利用成熟的D3D11渲染器，同时使用D3D12的强大性能
+    { // 创建RTV
+
+        // 创建D3D11设备和上下文
         DX::ThrowIfFailed(D3D11On12CreateDevice(m_pD3D12Device.Get(), d3d11DeviceFlags, nullptr, 0, reinterpret_cast<IUnknown **>(m_pD3D12CmdQueue.GetAddressOf()), 1, 0, &m_pDevice, &m_pImmediateContext, nullptr));
         DX::ThrowIfFailed(m_pDevice.As(&m_pD3D11On12Device));
         DX::ThrowIfFailed(m_pImmediateContext.As(&m_pAnnotation));
 
+        // 创建RTV，总共三个
         for (uint32_t frameID = 0; frameID < FrameCount; frameID++)
         {
+            // 从交换链获取帧缓冲，并存放于后台缓冲区指针数组中
             DX::ThrowIfFailed(m_pSwapChain->GetBuffer(frameID, IID_PPV_ARGS(&m_pD3D12BackBuffers[frameID])));
 
+            // 包装为D3D11资源形式的后台缓冲区
             D3D11_RESOURCE_FLAGS d3d11Flags = {D3D11_BIND_RENDER_TARGET};
             DX::ThrowIfFailed(m_pD3D11On12Device->CreateWrappedResource(m_pD3D12BackBuffers[frameID].Get(), &d3d11Flags, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET, IID_PPV_ARGS(&m_pD3D11BackBuffersDummy[frameID])));
             DX::ThrowIfFailed(m_pD3D11On12Device->CreateWrappedResource(m_pD3D12BackBuffers[frameID].Get(), &d3d11Flags, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT, IID_PPV_ARGS(&m_pD3D11BackBuffers[frameID])));
 
+            // 由后台缓冲区创建RTV
             D3D11_RENDER_TARGET_VIEW_DESC descRTV = {};
             descRTV.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
             descRTV.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
             DX::ThrowIfFailed(m_pDevice->CreateRenderTargetView(m_pD3D11BackBuffers[frameID].Get(), &descRTV, m_pRTV[frameID].GetAddressOf()));
         }
+    }
+
+    { // 创建DSV
+
+        // 创建深度模板缓冲区
+        D3D11_TEXTURE2D_DESC descDepth = {};
+        descDepth.Width = m_ApplicationDesc.Width;
+        descDepth.Height = m_ApplicationDesc.Height;
+        descDepth.MipLevels = 1;
+        descDepth.ArraySize = 1;
+        descDepth.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        descDepth.SampleDesc.Count = 1;
+        descDepth.SampleDesc.Quality = 0;
+        descDepth.Usage = D3D11_USAGE_DEFAULT;
+        descDepth.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+        descDepth.CPUAccessFlags = 0;
+        descDepth.MiscFlags = 0;
+
+        // 创建深度模板缓冲区纹理
+        DX::ThrowIfFailed(m_pDevice->CreateTexture2D(&descDepth, nullptr, m_pDepthStencil.GetAddressOf()));
+
+        // 创建DSV
+        D3D11_DEPTH_STENCIL_VIEW_DESC descDSV = {};
+        descDSV.Format = descDepth.Format;
+        descDSV.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+        descDSV.Texture2D.MipSlice = 0;
+        DX::ThrowIfFailed(m_pDevice->CreateDepthStencilView(m_pDepthStencil.Get(), &descDSV, m_pDSV.GetAddressOf()));
     }
 
     // 创建Fence，用于同步CPU和GPU

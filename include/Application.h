@@ -121,6 +121,10 @@ protected:
     DX::ComPtr<IDXGISwapChain3> m_pSwapChain;
     DX::ComPtr<ID3DUserDefinedAnnotation> m_pAnnotation;
     DX::ComPtr<ID3D11RenderTargetView> m_pRTV[FrameCount];
+
+    DX::ComPtr<ID3D11Texture2D> m_pDepthStencil;
+    DX::ComPtr<ID3D11DepthStencilView> m_pDSV;
+
     TimePoint m_LastFrame;
     ApplicationDesc m_ApplicationDesc;
     GLFWWindowState m_GLFWState = {};

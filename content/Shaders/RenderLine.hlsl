@@ -17,9 +17,9 @@ void RenderLineVS(uint id : SV_VertexID, out VertexOutput output)
     float4 yProj = mul(FrameBuffer.WorldViewProjectionMatrix, float4(0.0, 1.0, 0.0, 1.0));
     float4 zProj = mul(FrameBuffer.WorldViewProjectionMatrix, float4(0.0, 0.0, 1.0, 1.0));
 
-    visible.x = xProj.z > 0.5 ? 1.0 : -1.0;
-    visible.y = yProj.z > 0.5 ? 1.0 : -1.0;
-    visible.z = zProj.z > 0.5 ? 1.0 : -1.0;
+    visible.x = xProj.z > 0.5 ? 0.5 : -0.5;
+    visible.y = yProj.z > 0.5 ? 0.5 : -0.5;
+    visible.z = zProj.z > 0.5 ? 0.5 : -0.5;
 
     int3 ticksCount;
     ticksCount.x = FrameBuffer.GridLineInfo.x;
