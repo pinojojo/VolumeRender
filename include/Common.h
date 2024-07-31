@@ -39,7 +39,7 @@
 
 // #define WINDOWLESS
 
-// #define USE_TIFF
+#define USE_TIFF
 
 namespace DX
 {

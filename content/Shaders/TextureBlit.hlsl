@@ -37,7 +37,7 @@ void BlitVS(uint id : SV_VertexID, out VertexOutput output)
     float2 texcoord = float2((id << 1) & 2, id & 2);
     output.texcoord = texcoord;
     float4 position = float4(texcoord * float2(2, -2) + float2(-1, 1), 0.5, 1);
-    output.position = position * float4(0.5, 0.5, 0.5, 1);
+    output.position = position;
 
     output.depth = 0.1;
 }
@@ -51,7 +51,18 @@ struct PixelOutput
 PixelOutput BlitPS(VertexOutput input)
 {
     PixelOutput output;
-    output.color = TextureSrc.Sample(SamplerPoint, input.texcoord);
+
+    float4 color = TextureSrc.Sample(SamplerPoint, input.texcoord);
+    float colorIntensity = color.r * 0.3 + color.g * 0.59 + color.b * 0.11;
+    color.a = colorIntensity;
+
     output.depth = input.depth; // 输出手动设置的深度值
+    if (colorIntensity < 0.01)
+    {
+        output.depth = 1.0; // 如果颜色值过小，设置深度值为1.0
+    }
+
+    output.color = color;
+
     return output;
 }

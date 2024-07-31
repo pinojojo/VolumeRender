@@ -101,7 +101,7 @@ void RenderLineVS(uint id : SV_VertexID, out VertexOutput output)
     }
 
     output.position = mul(FrameBuffer.WorldViewProjectionMatrix, float4(pos, 1.0));
-    output.color = color;
+    output.color = float4(0.2, 0.3, 0.33, 0.5);
 }
 
 float4 RenderLinePS(VertexOutput input) : SV_TARGET0

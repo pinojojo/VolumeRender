@@ -135,6 +135,8 @@ private:
 
     DX::ComPtr<ID3D11InputLayout> m_pGridLineInputLayout; // 用于渲染网格线的着色器的输入布局
 
+    DX::ComPtr<ID3D11BlendState> m_pBlendState;
+
     ColorTransferFunction1D m_DiffuseTransferFunc;
     ColorTransferFunction1D m_SpecularTransferFunc;
     ColorTransferFunction1D m_EmissionTransferFunc;
