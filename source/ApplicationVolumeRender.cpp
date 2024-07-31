@@ -1012,8 +1012,9 @@ void ApplicationVolumeRender::Update(float deltaTime)
         std::cout << e.what() << std::endl;
     }
 
-    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 0.9f * m_DimensionZ};
+    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 0.9f * m_DimensionZ}; // 通常z的间距要比XY的像素间距要大
     scaleVector /= (std::max)({scaleVector.x, scaleVector.y, scaleVector.z});
+    std::cout << "scaleVector: " << scaleVector.x << " " << scaleVector.y << " " << scaleVector.z << std::endl;
 
     Hawk::Math::Mat4x4 V = m_Camera.ToMatrix();
     Hawk::Math::Mat4x4 P = Hawk::Math::Orthographic(m_Zoom * (m_ApplicationDesc.Width / static_cast<F32>(m_ApplicationDesc.Height)), m_Zoom, -1.0f, 1.0f);
@@ -1271,7 +1272,6 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
     m_pAnnotation->BeginEvent(L"Render Pass: TextureBlit [Tone Map] -> [Back Buffer]");
     this->TextureBlit(m_pSRVToneMap, pRTV);
     m_pAnnotation->EndEvent();
-
     this->DrawGridLine(pRTV);
 
     // 渲染tiles线
