@@ -224,6 +224,7 @@ struct FrameBuffer
     Hawk::Math::Mat4x4 InvWorldViewProjectionMatrix;
 
     uint32_t FrameIndex;
+
     float StepSize;
     Hawk::Math::Vec2 FrameOffset;
 
@@ -235,6 +236,10 @@ struct FrameBuffer
 
     float Exposure;
     Hawk::Math::Vec3 BoundingBoxMax;
+
+    Hawk::Math::Vec4 GridLineInfo;
+    Hawk::Math::Vec4 GridLineInfoStart;
+    Hawk::Math::Vec4 GridLineInfoStep;
 };
 
 struct DispatchIndirectBuffer
@@ -1012,9 +1017,31 @@ void ApplicationVolumeRender::Update(float deltaTime)
         std::cout << e.what() << std::endl;
     }
 
-    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 0.9f * m_DimensionZ}; // 通常z的间距要比XY的像素间距要大
+    // 实际物体的尺寸
+    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 0.7f * m_DimensionZ}; // 通常z的间距要比XY的像素间距要大，当然要根据具体的扫描间距来
+
+    double maxDim = (std::max)({scaleVector.x, scaleVector.y, scaleVector.z});
+    double gridSpacing = maxDim / 6.0;
+    gridSpacing = std::ceil(gridSpacing / 10.0) * 10.0;
+    std::vector<double> xTicks, yTicks, zTicks;
+    for (double i = 0; i <= scaleVector.x; i += gridSpacing)
+        xTicks.push_back(i - scaleVector.x * 0.5);
+    for (double i = 0; i <= scaleVector.y; i += gridSpacing)
+        yTicks.push_back(i - scaleVector.y * 0.5);
+    for (double i = 0; i <= scaleVector.z; i += gridSpacing)
+        zTicks.push_back(i - scaleVector.z * 0.5);
+
     scaleVector /= (std::max)({scaleVector.x, scaleVector.y, scaleVector.z});
-    std::cout << "scaleVector: " << scaleVector.x << " " << scaleVector.y << " " << scaleVector.z << std::endl;
+
+    // 对ticks也进行NDC空间的缩放
+    for (auto &e : xTicks)
+        e /= maxDim;
+    for (auto &e : yTicks)
+        e /= maxDim;
+    for (auto &e : zTicks)
+        e /= maxDim;
+
+    m_GridLineVertexCnt = 2 * 2 * (xTicks.size() + yTicks.size() + zTicks.size());
 
     Hawk::Math::Mat4x4 V = m_Camera.ToMatrix();
     Hawk::Math::Mat4x4 P = Hawk::Math::Orthographic(m_Zoom * (m_ApplicationDesc.Width / static_cast<F32>(m_ApplicationDesc.Height)), m_Zoom, -1.0f, 1.0f);
@@ -1024,6 +1051,7 @@ void ApplicationVolumeRender::Update(float deltaTime)
     Hawk::Math::Mat4x4 VP = P * V;
     Hawk::Math::Mat4x4 NV = V * N;
     Hawk::Math::Mat4x4 WVP = P * V * W;
+    m_WVP = WVP;
 
     {
         DX::MapHelper<FrameBuffer> map(m_pImmediateContext, m_pConstantBufferFrame, D3D11_MAP_WRITE_DISCARD, 0);
@@ -1058,6 +1086,17 @@ void ApplicationVolumeRender::Update(float deltaTime)
         map->FrameOffset = Hawk::Math::Vec2(m_RandomDistribution(m_RandomGenerator), m_RandomDistribution(m_RandomGenerator));
         map->RenderTargetDim = Hawk::Math::Vec2(static_cast<F32>(m_ApplicationDesc.Width), static_cast<F32>(m_ApplicationDesc.Height));
         map->InvRenderTargetDim = Hawk::Math::Vec2(1.0f, 1.0f) / map->RenderTargetDim;
+
+        // map->GridLineCnt = 2; // 每个tick都需要两条线
+        map->GridLineInfo.x = static_cast<F32>(xTicks.size()); // x轴的ticks数量
+        map->GridLineInfo.y = static_cast<F32>(yTicks.size()); // y轴的ticks数量
+        map->GridLineInfo.z = static_cast<F32>(zTicks.size()); // z轴的ticks数量
+        map->GridLineInfoStart.x = xTicks[0];
+        map->GridLineInfoStart.y = yTicks[0];
+        map->GridLineInfoStart.z = zTicks[0];
+        map->GridLineInfoStep.x = xTicks[1] - xTicks[0];
+        map->GridLineInfoStep.y = yTicks[1] - yTicks[0];
+        map->GridLineInfoStep.z = zTicks[1] - zTicks[0];
     }
 }
 
@@ -1106,7 +1145,7 @@ void ApplicationVolumeRender::DrawGridLine(DX::ComPtr<ID3D11RenderTargetView> pD
     m_PSOGridLine.Apply(m_pImmediateContext);
 
     // 执行
-    m_pImmediateContext->Draw(6, 0);
+    m_pImmediateContext->Draw(m_GridLineVertexCnt, 0);
 
     // 解绑RTV
     m_pImmediateContext->OMSetRenderTargets(0, nullptr, nullptr);
@@ -1303,10 +1342,28 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
     assert(ImGui::GetCurrentContext() != nullptr && "Missing dear imgui context. Refer to examples app!");
 
     ImGui::ShowDemoWindow();
+
     ImGui::Begin("Settings");
 
     static bool isShowAppMetrics = false;
     static bool isShowAppAbout = false;
+
+    { // debug相机信息相关
+        Hawk::Math::Vec4 position_o = {0.0f, 0.0f, 0.0f, 1.0f};
+        Hawk::Math::Vec4 position_x = {1.0f, 0.0f, 0.0f, 1.0f};
+        Hawk::Math::Vec4 position_y = {0.0f, 1.0f, 0.0f, 1.0f};
+        Hawk::Math::Vec4 position_z = {0.0f, 0.0f, 1.0f, 1.0f};
+
+        position_o = m_WVP * position_o;
+        position_x = m_WVP * position_x;
+        position_y = m_WVP * position_y;
+        position_z = m_WVP * position_z;
+
+        ImGui::Text("O projected to: %.2f %.2f %.2f %.2f", position_o.x, position_o.y, position_o.z, position_o.w);
+        ImGui::Text("X projected to: %.2f %.2f %.2f %.2f", position_x.x, position_x.y, position_x.z, position_x.w);
+        ImGui::Text("Y projected to: %.2f %.2f %.2f %.2f", position_y.x, position_y.y, position_y.z, position_y.w);
+        ImGui::Text("Z projected to: %.2f %.2f %.2f %.2f", position_z.x, position_z.y, position_z.z, position_z.w);
+    }
 
     if (ImGui::Button("Load Volume"))
     {

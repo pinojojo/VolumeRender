@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-#pragma pack_matrix( row_major )
+#pragma pack_matrix(row_major)
 
 static const float M_PI = 3.14159265f;
 static const float M_EPSILON = 1.0e-3f;
@@ -39,12 +39,12 @@ cbuffer ConstantFrameBuffer : register(b0)
         float4x4 ViewMatrix;
         float4x4 WorldMatrix;
         float4x4 NormalMatrix;
-    
+
         float4x4 InvProjectionMatrix;
         float4x4 InvViewMatrix;
         float4x4 InvWorldMatrix;
         float4x4 InvNormalMatrix;
-    
+
         float4x4 ViewProjectionMatrix;
         float4x4 NormalViewMatrix;
         float4x4 WorldViewProjectionMatrix;
@@ -54,17 +54,23 @@ cbuffer ConstantFrameBuffer : register(b0)
         float4x4 InvWorldViewProjectionMatrix;
 
         uint FrameIndex;
+
         float StepSize;
         float2 FrameOffset;
-        
+
         float2 InvRenderTargetDim;
         float2 RenderTargetDim;
-        
+
         float Density;
         float3 BoundingBoxMin;
 
         float Exposure;
         float3 BoundingBoxMax;
+
+        float4 GridLineInfo;
+        float4 GridLineInfoStart;
+        float4 GridLineInfoStep;
+
     } FrameBuffer;
 }
 
@@ -131,19 +137,19 @@ float2 ScreenSpaceToNDC(float2 pixel, float2 invDimension)
 // 可以根据Intersection的min和max的值来判断是否和AABB盒子相交
 Intersection IntersectAABB(Ray ray, AABB aabb)
 {
-    Intersection intersect = { +FLT_MAX, -FLT_MAX };
+    Intersection intersect = {+FLT_MAX, -FLT_MAX};
 
     const float3 invR = rcp(ray.Direction); // 分母
     const float3 bot = invR * (aabb.Min - ray.Origin);
     const float3 top = invR * (aabb.Max - ray.Origin);
     const float3 tmin = min(top, bot);
     const float3 tmax = max(top, bot);
-   
+
     const float largestMin = Max3(tmin.x, tmin.y, tmin.z);
     const float largestMax = Min3(tmax.x, tmax.y, tmax.z);
-    
+
     intersect.Min = largestMin;
-    intersect.Max = largestMax; 
+    intersect.Max = largestMax;
     return intersect;
 }
 
@@ -161,7 +167,8 @@ Ray CreateCameraRay(uint2 id, float2 offset, float2 invDimension, float4x4 invWV
     ray.Direction = normalize(rayEnd.xyz - rayStart.xyz);
     ray.Origin = rayStart.xyz;
     ray.Min = 0;
-    ray.Max = distance(rayEnd.xyz, rayStart.xyz);;
+    ray.Max = distance(rayEnd.xyz, rayStart.xyz);
+    ;
 
     return ray;
 }
@@ -182,7 +189,7 @@ float Rand(inout CRNG rng)
 
 CRNG InitCRND(uint2 id, uint frameIndex)
 {
-    CRNG rng = { frameIndex + PCGHash((id.x << 16) | id.y) };
+    CRNG rng = {frameIndex + PCGHash((id.x << 16) | id.y)};
     return rng;
 }
 

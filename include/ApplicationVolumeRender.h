@@ -180,4 +180,8 @@ private:
     bool m_IsHistogramUpdated = false;
 
     bool m_IsFirstFrameAfterVolumeDataLoad = false;
+
+    Hawk::Math::Mat4x4 m_WVP;
+
+    uint32_t m_GridLineVertexCnt = 2;
 };
