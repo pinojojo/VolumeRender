@@ -1142,6 +1142,14 @@ void ApplicationVolumeRender::TextureBlit(DX::ComPtr<ID3D11ShaderResourceView> p
     m_pImmediateContext->PSSetShaderResources(0, 1, pSrc.GetAddressOf());
     m_pImmediateContext->PSSetSamplers(0, 1, m_pSamplerPoint.GetAddressOf());
 
+    {
+
+        // 设置混合状态
+        float blendFactor[4] = {0.3f, 0.3f, 0.3f, 0.3f};
+        UINT sampleMask = 0xffffffff;
+        m_pImmediateContext->OMSetBlendState(m_pBlendState.Get(), blendFactor, sampleMask);
+    }
+
     // Execute
     m_pImmediateContext->Draw(6, 0);
 
@@ -1166,7 +1174,7 @@ void ApplicationVolumeRender::DrawGridLine(DX::ComPtr<ID3D11RenderTargetView> pD
     m_pImmediateContext->OMSetRenderTargets(1, pDst.GetAddressOf(), m_pDSV.Get());
     m_pImmediateContext->RSSetViewports(1, &viewport);
 
-    { // 设置混合状态，让后续绘制能半透明的覆盖在背景网格上
+    {
 
         // 设置混合状态
         float blendFactor[4] = {0.3f, 0.3f, 0.3f, 0.3f};

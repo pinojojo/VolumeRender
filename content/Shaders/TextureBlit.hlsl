@@ -54,15 +54,8 @@ PixelOutput BlitPS(VertexOutput input)
 
     float4 color = TextureSrc.Sample(SamplerPoint, input.texcoord);
     float colorIntensity = color.r * 0.3 + color.g * 0.59 + color.b * 0.11;
-
-    color.a = 0.1;
-
-    output.depth = input.depth; // 输出手动设置的深度值
-    if (colorIntensity < 0.001)
-    {
-        output.depth = 1.0; // 如果颜色值过小，设置深度值为1.0
-    }
-
+    color.a = colorIntensity; // 设置alpha值为颜色强度
+    output.depth = input.depth;
     output.color = color;
 
     return output;

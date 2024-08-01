@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
     {
         auto appDesc = ApplicationDesc{};
 
-        appDesc.Width = 1200;
+        appDesc.Width = 1600;
         appDesc.Height = 800;
 
         appDesc.Tittle = "Application VolumeRender <DX11>";
