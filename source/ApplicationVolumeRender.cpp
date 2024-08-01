@@ -374,7 +374,7 @@ void ApplicationVolumeRender::InitializeVolumeTexture()
 
     std::vector<uint16_t> intensity;
     int width, height, depth;
-    LoadVolumeDataFromTiff("content/Textures/mouse_stack.tif", intensity, width, height, depth);
+    LoadVolumeDataFromTiff("content/Textures/o.tif", intensity, width, height, depth);
     m_DimensionX = width;
     m_DimensionY = height;
     m_DimensionZ = depth;
@@ -1036,6 +1036,13 @@ void ApplicationVolumeRender::Update(float deltaTime)
             m_IsRecreateDiffuseTexture = false;
             m_FrameIndex = 0;
         }
+
+        if (m_IsRecreateSpecularTexture) // 更新反射光
+        {
+            m_pSRVSpecularTF = m_SpecularTransferFunc.GenerateTexture(m_pDevice, m_SamplingCount);
+            m_IsRecreateSpecularTexture = false;
+            m_FrameIndex = 0;
+        }
     }
     catch (std::exception const &e)
     {
@@ -1043,19 +1050,45 @@ void ApplicationVolumeRender::Update(float deltaTime)
     }
 
     // 实际物体的尺寸
-    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 0.7f * m_DimensionZ}; // 通常z的间距要比XY的像素间距要大，当然要根据具体的扫描间距来
+    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 1.5f * m_DimensionZ}; // 通常z的间距要比XY的像素间距要大，当然要根据具体的扫描间距来
 
     double maxDim = (std::max)({scaleVector.x, scaleVector.y, scaleVector.z});
-    double gridSpacing = maxDim / 6.0;
+    double gridSpacing = maxDim / 10.0;
     gridSpacing = std::ceil(gridSpacing / 10.0) * 10.0;
+
     std::vector<double> xTicks, yTicks, zTicks;
-    for (double i = 0; i <= scaleVector.x; i += gridSpacing)
-        xTicks.push_back(i - scaleVector.x * 0.5);
-    for (double i = 0; i <= scaleVector.y; i += gridSpacing)
-        yTicks.push_back(i - scaleVector.y * 0.5);
-    for (double i = 0; i <= scaleVector.z; i += gridSpacing)
-        zTicks.push_back(i - scaleVector.z * 0.5);
-    zTicks.push_back(scaleVector.z * 0.5);
+    double xRange[] = {-scaleVector.x * 0.5, scaleVector.x * 0.5};
+    double yRange[] = {-scaleVector.y * 0.5, scaleVector.y * 0.5};
+    double zRange[] = {-scaleVector.z * 0.5, scaleVector.z * 0.5};
+
+    // 找合适的ticks
+    auto findMultipleTicks = [](double range[2], double gridSpacing) -> std::vector<double>
+    {
+        std::vector<double> multiples;
+
+        // multiples.push_back(range[0]);
+
+        // 确定范围
+        double start = range[0];
+        double end = range[1];
+
+        // 计算起始点
+        double firstMultiple = std::ceil(start / gridSpacing) * gridSpacing;
+
+        // 生成所有整数倍值
+        for (double value = firstMultiple; value <= end; value += gridSpacing)
+        {
+            multiples.push_back(value);
+        }
+
+        // multiples.push_back(range[1]);
+
+        return multiples;
+    };
+
+    xTicks = findMultipleTicks(xRange, gridSpacing);
+    yTicks = findMultipleTicks(yRange, gridSpacing);
+    zTicks = findMultipleTicks(zRange, gridSpacing);
 
     scaleVector /= (std::max)({scaleVector.x, scaleVector.y, scaleVector.z});
 
@@ -1120,9 +1153,9 @@ void ApplicationVolumeRender::Update(float deltaTime)
         map->GridLineInfoStart.x = xTicks[0];
         map->GridLineInfoStart.y = yTicks[0];
         map->GridLineInfoStart.z = zTicks[0];
-        map->GridLineInfoStep.x = xTicks[1] - xTicks[0];
-        map->GridLineInfoStep.y = yTicks[1] - yTicks[0];
-        map->GridLineInfoStep.z = zTicks[1] - zTicks[0];
+        map->GridLineInfoStep.x = gridSpacing / maxDim;
+        map->GridLineInfoStep.y = gridSpacing / maxDim;
+        map->GridLineInfoStep.z = gridSpacing / maxDim;
     }
 }
 
@@ -1564,6 +1597,17 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
                             }
 
                             ImGui::PopID();
+
+                            // 鼠标滚轮微调
+                            if (ImGui::IsItemHovered())
+                            {
+                                float shift = 0;
+                                shift *= ImGui::GetIO().MouseWheel;
+                                position += shift;
+                                position = std::clamp(position, vMin, vMax);
+                                m_OpacityTransferFunc.PLF.Position[row] = position;
+                                m_IsRecreateOpacityTexture = true;
+                            }
                         }
                         else if (column == 2)
                         {
@@ -1669,7 +1713,19 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
                             double g = m_DiffuseTransferFunc.PLF[1].Value[row];
                             double b = m_DiffuseTransferFunc.PLF[2].Value[row];
 
-                            ImGui::Text("%.2f,%.2f,%.2f", r, g, b);
+                            static float diffuseColor[4] = {static_cast<float>(r), static_cast<float>(g), static_cast<float>(b), 1.0f};
+                            diffuseColor[0] = r;
+                            diffuseColor[1] = g;
+                            diffuseColor[2] = b;
+                            ImGui::PushID(row * COLUMNS_COUNT + column);
+                            if (ImGui::ColorEdit3("##diffuse", diffuseColor))
+                            {
+                                m_DiffuseTransferFunc.PLF[0].Value[row] = diffuseColor[0];
+                                m_DiffuseTransferFunc.PLF[1].Value[row] = diffuseColor[1];
+                                m_DiffuseTransferFunc.PLF[2].Value[row] = diffuseColor[2];
+                                m_IsRecreateDiffuseTexture = true;
+                            }
+                            ImGui::PopID();
                         }
                         else if (column == 3)
                         {
@@ -1677,7 +1733,19 @@ void ApplicationVolumeRender::RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV)
                             double g = m_SpecularTransferFunc.PLF[1].Value[row];
                             double b = m_SpecularTransferFunc.PLF[2].Value[row];
 
-                            ImGui::Text("%.2f,%.2f,%.2f", r, g, b);
+                            static float specularColor[4] = {static_cast<float>(r), static_cast<float>(g), static_cast<float>(b), 1.0f};
+                            specularColor[0] = r;
+                            specularColor[1] = g;
+                            specularColor[2] = b;
+                            ImGui::PushID(row * COLUMNS_COUNT + column);
+                            if (ImGui::ColorEdit3("##specular", specularColor))
+                            {
+                                m_SpecularTransferFunc.PLF[0].Value[row] = specularColor[0];
+                                m_SpecularTransferFunc.PLF[1].Value[row] = specularColor[1];
+                                m_SpecularTransferFunc.PLF[2].Value[row] = specularColor[2];
+                                m_IsRecreateSpecularTexture = true;
+                            }
+                            ImGui::PopID();
                         }
                     }
                 }

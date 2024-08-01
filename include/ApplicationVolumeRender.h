@@ -177,6 +177,7 @@ private:
     bool m_IsVolumeDataLoaded = false;
     bool m_IsRecreateOpacityTexture = false;
     bool m_IsRecreateDiffuseTexture = false;
+    bool m_IsRecreateSpecularTexture = false;
 
     std::vector<double> m_HistogramData;
     bool m_IsHistogramUpdated = false;
