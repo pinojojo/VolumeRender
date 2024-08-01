@@ -260,6 +260,31 @@ struct DrawInstancedIndirectBuffer
 ApplicationVolumeRender::ApplicationVolumeRender(ApplicationDesc const &desc)
     : Application(desc), m_RandomGenerator(m_RandomDevice()), m_RandomDistribution(-0.5f, +0.5f)
 {
+    {
+        // 定义混合状态描述
+        D3D11_BLEND_DESC blendDesc = {};
+        blendDesc.AlphaToCoverageEnable = FALSE;
+        blendDesc.IndependentBlendEnable = FALSE;
+
+        for (int rtIndex = 0; rtIndex < 3; rtIndex++)
+        {
+            blendDesc.RenderTarget[rtIndex].BlendEnable = TRUE;
+            blendDesc.RenderTarget[rtIndex].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+            blendDesc.RenderTarget[rtIndex].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+            blendDesc.RenderTarget[rtIndex].BlendOp = D3D11_BLEND_OP_ADD;
+            blendDesc.RenderTarget[rtIndex].SrcBlendAlpha = D3D11_BLEND_ONE;
+            blendDesc.RenderTarget[rtIndex].DestBlendAlpha = D3D11_BLEND_ZERO;
+            blendDesc.RenderTarget[rtIndex].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+            blendDesc.RenderTarget[rtIndex].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        }
+
+        // 创建混合状态
+        auto result = m_pDevice->CreateBlendState(&blendDesc, m_pBlendState.GetAddressOf());
+        if (FAILED(result))
+        {
+            std::cout << "create error " << result << std::endl;
+        }
+    }
 
     this->InitializeShaders();
     this->InitializeTransferFunction();
@@ -739,32 +764,6 @@ void ApplicationVolumeRender::InitializeSamplerStates()
     m_pSamplerPoint = createSamplerState(D3D11_FILTER_MIN_MAG_MIP_POINT, D3D11_TEXTURE_ADDRESS_BORDER);
     m_pSamplerLinear = createSamplerState(D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT, D3D11_TEXTURE_ADDRESS_BORDER);
     m_pSamplerAnisotropic = createSamplerState(D3D11_FILTER_ANISOTROPIC, D3D11_TEXTURE_ADDRESS_WRAP);
-
-    {
-        // 定义混合状态描述
-        D3D11_BLEND_DESC blendDesc = {};
-        blendDesc.AlphaToCoverageEnable = FALSE;
-        blendDesc.IndependentBlendEnable = FALSE;
-
-        for (int rtIndex = 0; rtIndex < 3; rtIndex++)
-        {
-            blendDesc.RenderTarget[rtIndex].BlendEnable = TRUE;
-            blendDesc.RenderTarget[rtIndex].SrcBlend = D3D11_BLEND_SRC_ALPHA;
-            blendDesc.RenderTarget[rtIndex].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-            blendDesc.RenderTarget[rtIndex].BlendOp = D3D11_BLEND_OP_ADD;
-            blendDesc.RenderTarget[rtIndex].SrcBlendAlpha = D3D11_BLEND_ONE;
-            blendDesc.RenderTarget[rtIndex].DestBlendAlpha = D3D11_BLEND_ZERO;
-            blendDesc.RenderTarget[rtIndex].BlendOpAlpha = D3D11_BLEND_OP_ADD;
-            blendDesc.RenderTarget[rtIndex].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-        }
-
-        // 创建混合状态
-        auto result = m_pDevice->CreateBlendState(&blendDesc, m_pBlendState.GetAddressOf());
-        if (FAILED(result))
-        {
-            std::cout << "create error " << result << std::endl;
-        }
-    }
 }
 
 void ApplicationVolumeRender::InitializeRenderTextures()
@@ -1134,10 +1133,8 @@ void ApplicationVolumeRender::TextureBlit(DX::ComPtr<ID3D11ShaderResourceView> p
     D3D11_VIEWPORT viewport = {0.0f, 0.0f, static_cast<float>(m_ApplicationDesc.Width), static_cast<float>(m_ApplicationDesc.Height), 0.0f, 1.0f};
     D3D11_RECT scissor = {0, 0, static_cast<int32_t>(m_ApplicationDesc.Width), static_cast<int32_t>(m_ApplicationDesc.Height)};
 
-    m_pImmediateContext->ClearDepthStencilView(m_pDSV.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
     m_pImmediateContext->OMSetRenderTargets(1, pDst.GetAddressOf(), m_pDSV.Get());
-    // m_pImmediateContext->OMSetRenderTargets(1, pDst.GetAddressOf(), nullptr);
-    m_pImmediateContext->RSSetScissorRects(1, &scissor);
+    // m_pImmediateContext->RSSetScissorRects(1, &scissor);
     m_pImmediateContext->RSSetViewports(1, &viewport);
 
     // Bind PSO and Resources
@@ -1167,8 +1164,15 @@ void ApplicationVolumeRender::DrawGridLine(DX::ComPtr<ID3D11RenderTargetView> pD
 
     // 设置渲染目标、裁剪矩形和视口
     m_pImmediateContext->OMSetRenderTargets(1, pDst.GetAddressOf(), m_pDSV.Get());
-
     m_pImmediateContext->RSSetViewports(1, &viewport);
+
+    { // 设置混合状态，让后续绘制能半透明的覆盖在背景网格上
+
+        // 设置混合状态
+        float blendFactor[4] = {0.3f, 0.3f, 0.3f, 0.3f};
+        UINT sampleMask = 0xffffffff;
+        m_pImmediateContext->OMSetBlendState(m_pBlendState.Get(), blendFactor, sampleMask);
+    }
 
     // 绑定PSO
     m_PSOGridLine.Apply(m_pImmediateContext);
@@ -1336,7 +1340,7 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
         m_pAnnotation->EndEvent();
     }
 
-    { // 清深度缓冲
+    { // 设置深度缓冲行为
 
         D3D11_DEPTH_STENCIL_DESC dsDesc;
         ZeroMemory(&dsDesc, sizeof(dsDesc));
@@ -1355,13 +1359,8 @@ void ApplicationVolumeRender::RenderFrame(DX::ComPtr<ID3D11RenderTargetView> pRT
         m_pImmediateContext->ClearRenderTargetView(pRTV.Get(), clearColor);
     }
 
-    { // 设置混合状态，让渲染结果是半透明的覆盖在背景网格上
-
-        // 设置混合状态
-        float blendFactor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-        UINT sampleMask = 0xffffffff;
-        m_pImmediateContext->OMSetBlendState(m_pBlendState.Get(), blendFactor, sampleMask);
-    }
+    // 清理深度缓冲
+    m_pImmediateContext->ClearDepthStencilView(m_pDSV.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     // 渲染网格
     this->DrawGridLine(pRTV);

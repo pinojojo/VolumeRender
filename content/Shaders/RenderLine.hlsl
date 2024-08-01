@@ -5,6 +5,7 @@ struct VertexOutput
 {
     float4 position : SV_Position;
     float4 color : COLOR;
+    float depth : TEXCOORD1;
 };
 
 // ID代表第几个要渲染的线段
@@ -102,9 +103,21 @@ void RenderLineVS(uint id : SV_VertexID, out VertexOutput output)
 
     output.position = mul(FrameBuffer.WorldViewProjectionMatrix, float4(pos, 1.0));
     output.color = float4(0.2, 0.3, 0.33, 0.5);
+    output.depth = 0.9;
 }
 
-float4 RenderLinePS(VertexOutput input) : SV_TARGET0
+struct PixelOutput
 {
-    return input.color;
+    float4 color : SV_Target;
+    float depth : SV_Depth;
+};
+
+PixelOutput RenderLinePS(VertexOutput input)
+{
+    PixelOutput output;
+
+    output.color = input.color;
+    output.depth = input.depth;
+
+    return output;
 }
