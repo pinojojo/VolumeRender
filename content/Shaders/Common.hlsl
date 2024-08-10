@@ -67,7 +67,7 @@ cbuffer ConstantFrameBuffer : register(b0)
         float Exposure;
         float3 BoundingBoxMax;
 
-        float4 GridLineInfo;
+        float4 GridLineTickCount;
         float4 GridLineInfoStart;
         float4 GridLineInfoStep;
 

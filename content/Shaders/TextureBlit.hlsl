@@ -55,7 +55,7 @@ PixelOutput BlitPS(VertexOutput input)
     float4 color = TextureSrc.Sample(SamplerPoint, input.texcoord);
     float maxIntensity = max(max(color.x, color.y), color.z);
 
-    color.a = maxIntensity * 3;
+    color.a = maxIntensity * 10;
     output.depth = input.depth;
     output.color = color;
 

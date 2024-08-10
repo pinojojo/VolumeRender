@@ -23,9 +23,9 @@ void RenderLineVS(uint id : SV_VertexID, out VertexOutput output)
     visible.z = zProj.z > 0.5 ? 0.5 : -0.5;
 
     int3 ticksCount;
-    ticksCount.x = FrameBuffer.GridLineInfo.x;
-    ticksCount.y = FrameBuffer.GridLineInfo.y;
-    ticksCount.z = FrameBuffer.GridLineInfo.z;
+    ticksCount.x = FrameBuffer.GridLineTickCount.x;
+    ticksCount.y = FrameBuffer.GridLineTickCount.y;
+    ticksCount.z = FrameBuffer.GridLineTickCount.z;
 
     int order = id % 2;   // 0代表起点，1代表终点
     int lineID = id / 2;  // 一个线段两个顶点

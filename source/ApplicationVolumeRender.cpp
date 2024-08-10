@@ -237,7 +237,7 @@ struct FrameBuffer
     float Exposure;
     Hawk::Math::Vec3 BoundingBoxMax;
 
-    Hawk::Math::Vec4 GridLineInfo;
+    Hawk::Math::Vec4 GridLineTickCount;
     Hawk::Math::Vec4 GridLineInfoStart;
     Hawk::Math::Vec4 GridLineInfoStep;
 };
@@ -374,7 +374,7 @@ void ApplicationVolumeRender::InitializeVolumeTexture()
 
     std::vector<uint16_t> intensity;
     int width, height, depth;
-    LoadVolumeDataFromTiff("content/Textures/o.tif", intensity, width, height, depth);
+    LoadVolumeDataFromTiff("content/Textures/mouse_stack.tif", intensity, width, height, depth);
     m_DimensionX = width;
     m_DimensionY = height;
     m_DimensionZ = depth;
@@ -1049,11 +1049,10 @@ void ApplicationVolumeRender::Update(float deltaTime)
         std::cout << e.what() << std::endl;
     }
 
-    // 实际物体的尺寸
-    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 1.5f * m_DimensionZ}; // 通常z的间距要比XY的像素间距要大，当然要根据具体的扫描间距来
+    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 1.5f * m_DimensionZ}; //  实际物体的尺寸，通常z的间距要比XY的像素间距要大，当然要根据具体的扫描间距来
 
     double maxDim = (std::max)({scaleVector.x, scaleVector.y, scaleVector.z});
-    double gridSpacing = maxDim / 10.0;
+    double gridSpacing = maxDim / 12.0;
     gridSpacing = std::ceil(gridSpacing / 10.0) * 10.0;
 
     std::vector<double> xTicks, yTicks, zTicks;
@@ -1061,8 +1060,8 @@ void ApplicationVolumeRender::Update(float deltaTime)
     double yRange[] = {-scaleVector.y * 0.5, scaleVector.y * 0.5};
     double zRange[] = {-scaleVector.z * 0.5, scaleVector.z * 0.5};
 
-    // 找合适的ticks
-    auto findMultipleTicks = [](double range[2], double gridSpacing) -> std::vector<double>
+    // 计算合适的TICKS
+    auto computeMultipleTicks = [](double range[2], double gridSpacing) -> std::vector<double>
     {
         std::vector<double> multiples;
 
@@ -1086,9 +1085,9 @@ void ApplicationVolumeRender::Update(float deltaTime)
         return multiples;
     };
 
-    xTicks = findMultipleTicks(xRange, gridSpacing);
-    yTicks = findMultipleTicks(yRange, gridSpacing);
-    zTicks = findMultipleTicks(zRange, gridSpacing);
+    xTicks = computeMultipleTicks(xRange, gridSpacing);
+    yTicks = computeMultipleTicks(yRange, gridSpacing);
+    zTicks = computeMultipleTicks(zRange, gridSpacing);
 
     scaleVector /= (std::max)({scaleVector.x, scaleVector.y, scaleVector.z});
 
@@ -1146,10 +1145,9 @@ void ApplicationVolumeRender::Update(float deltaTime)
         map->RenderTargetDim = Hawk::Math::Vec2(static_cast<F32>(m_ApplicationDesc.Width), static_cast<F32>(m_ApplicationDesc.Height));
         map->InvRenderTargetDim = Hawk::Math::Vec2(1.0f, 1.0f) / map->RenderTargetDim;
 
-        // map->GridLineCnt = 2; // 每个tick都需要两条线
-        map->GridLineInfo.x = static_cast<F32>(xTicks.size()); // x轴的ticks数量
-        map->GridLineInfo.y = static_cast<F32>(yTicks.size()); // y轴的ticks数量
-        map->GridLineInfo.z = static_cast<F32>(zTicks.size()); // z轴的ticks数量
+        map->GridLineTickCount.x = static_cast<F32>(xTicks.size()); // x轴的ticks数量
+        map->GridLineTickCount.y = static_cast<F32>(yTicks.size()); // y轴的ticks数量
+        map->GridLineTickCount.z = static_cast<F32>(zTicks.size()); // z轴的ticks数量
         map->GridLineInfoStart.x = xTicks[0];
         map->GridLineInfoStart.y = yTicks[0];
         map->GridLineInfoStart.z = zTicks[0];
