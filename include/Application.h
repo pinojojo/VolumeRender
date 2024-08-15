@@ -103,7 +103,7 @@ protected:
 
     using TimePoint = std::chrono::high_resolution_clock::time_point;
 
-    static constexpr uint32_t FrameCount = 3;
+    static constexpr uint32_t FrameCount = 2; // 设置为3会导致截屏时出现问题
 
     GLFWwindow *m_pWindow = {};
     HANDLE m_FenceEvent = {};
