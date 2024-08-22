@@ -39,8 +39,6 @@
 
 // #define WINDOWLESS
 
-#define USE_TIFF
-
 namespace DX
 {
     struct Vertex

@@ -9,14 +9,6 @@ set(PROJECT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 set(PROJECT_OUTPUT_DIRECTORY "${PROJECT_DIRECTORY}/x64")
 list(PREPEND CMAKE_MODULE_PATH "${PROJECT_DIRECTORY}/cmake")
 
-# # 检测编译器并设置相应的标志
-# if(MSVC)
-# # 使用静态运行时库
-# set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
-# else()
-# # 其他编译器的设置（如果需要）
-# endif()
 include(cmake_settings)
 include(compiler_settings)
 
@@ -26,8 +18,6 @@ include(3rd-party/imgui)
 include(3rd-party/implot)
 include(3rd-party/directx-tex)
 include(3rd-party/nlohmann)
-
-find_package(OpenCV REQUIRED)
 
 set(INCLUDE
     include/Application.h
@@ -51,7 +41,6 @@ source_group("shaders" FILES ${SHADERS})
 add_executable(VolumeRender ${INCLUDE} ${SOURCE} ${SHADERS})
 
 target_link_libraries(VolumeRender PRIVATE fmt glfw imgui implot nlohmann_json directx-tex d3d11.lib d3d12.lib dxgi.lib d3dcompiler.lib)
-target_link_libraries(VolumeRender PRIVATE ${OpenCV_LIBS})
 
 target_include_directories(VolumeRender PRIVATE "include")
 
@@ -81,7 +70,6 @@ if(BUILD_API)
     add_library(VolumeRenderAPI SHARED ${API_INCLUDE} ${API_SOURCE} ${SHADERS})
 
     target_link_libraries(VolumeRenderAPI PRIVATE fmt glfw imgui implot nlohmann_json directx-tex d3d11.lib d3d12.lib dxgi.lib d3dcompiler.lib)
-    target_link_libraries(VolumeRenderAPI PRIVATE ${OpenCV_LIBS})
 
     target_include_directories(VolumeRenderAPI PRIVATE "include")
 

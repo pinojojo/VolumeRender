@@ -37,8 +37,6 @@
 #include <locale>
 #include <codecvt>
 
-#include <opencv2/opencv.hpp>
-
 // 将数值对齐到最近的2的幂次方
 unsigned int AlignToNearestPowerOf2(unsigned int value)
 {
@@ -61,80 +59,6 @@ unsigned int AlignToNearestPowerOf2(unsigned int value)
 
     // 返回更接近的那个
     return (value - lowerPowerOf2) < (powerOf2 - value) ? lowerPowerOf2 : powerOf2;
-}
-
-bool LoadVolumeDataFromTiff(const std::string &tiff_path,
-                            std::vector<uint16_t> &intensity,
-                            int &width, int &height, int &depth)
-{
-    std::vector<cv::Mat> layers;
-
-    // 使用 imreadmulti 读取多层图像
-    if (!cv::imreadmulti(tiff_path, layers, cv::IMREAD_ANYDEPTH | cv::IMREAD_ANYCOLOR))
-    {
-        std::cout << "Successfully loaded " << layers.size() << " layers." << std::endl;
-        return false;
-    }
-
-    width = layers[0].cols;
-    height = layers[0].rows;
-    depth = layers.size();
-
-    if (width <= 0 || height <= 0 || depth <= 0)
-    {
-        std::cout << "Invalid volume data." << std::endl;
-        return false;
-    }
-
-    if (layers[0].depth() != CV_16U && layers[0].depth() != CV_8U)
-    {
-        std::cout << "Invalid volume data format, depth must be 8 or 16 bits." << std::endl;
-        return false;
-    }
-
-    // 先保证每个图片的宽高都是2的N次方，如果不是需要，补齐
-    for (int z = 0; z < depth; z++)
-    {
-        int new_width = AlignToNearestPowerOf2(width);
-        int new_height = AlignToNearestPowerOf2(height);
-
-        if (new_width != width || new_height != height)
-        {
-            cv::Mat layer(new_height, new_width, layers[z].type(), cv::Scalar(0));
-            layers[z].copyTo(layer(cv::Rect(0, 0, width, height)));
-            layers[z] = layer;
-        }
-
-        width = new_width;
-        height = new_height;
-    }
-
-    // 先转为16bit
-    for (int z = 0; z < depth; z++)
-    {
-        if (layers[z].depth() != CV_16U)
-        {
-            cv::Mat layer;
-            layers[z].convertTo(layer, CV_16U);
-            layers[z] = layer;
-        }
-    }
-
-    if (intensity.size() != width * height * depth)
-    {
-        intensity.resize(width * height * depth);
-    }
-
-    for (int z = 0; z < depth; z++)
-    {
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                intensity[z * width * height + y * width + x] = layers[z].at<uint16_t>(y, x);
-            }
-        }
-    }
 }
 
 std::vector<double> GetHistogram(const std::vector<uint16_t> &intensity)
@@ -370,17 +294,6 @@ void ApplicationVolumeRender::InitializeShaders()
 void ApplicationVolumeRender::InitializeVolumeTexture()
 {
 
-#ifdef USE_TIFF
-
-    std::vector<uint16_t> intensity;
-    int width, height, depth;
-    LoadVolumeDataFromTiff("content/Textures/mouse_stack.tif", intensity, width, height, depth);
-    m_DimensionX = width;
-    m_DimensionY = height;
-    m_DimensionZ = depth;
-    m_DimensionMipLevels = static_cast<uint16_t>(std::ceil(std::log2(std::max(std::max(m_DimensionX, m_DimensionY), m_DimensionZ)))) + 1;
-
-#else
     std::unique_ptr<FILE, decltype(&fclose)> pFile(fopen("content/Textures/manix.dat", "rb"), fclose);
     if (!pFile)
         throw std::runtime_error("Failed to open file: " + std::string("Data/Textures/manix.dat"));
@@ -402,8 +315,6 @@ void ApplicationVolumeRender::InitializeVolumeTexture()
     std::cout << "tmin: " << tmin << " tmax: " << tmax << std::endl;
     for (size_t index = 0u; index < std::size(intensity); index++)
         intensity[index] = NormalizeIntensity(intensity[index], tmin, tmax);
-
-#endif
 
     std::cout << "UpdateVolumeTexture: " << m_DimensionX << " " << m_DimensionY << " " << m_DimensionZ << " " << m_DimensionMipLevels << std::endl;
 
@@ -975,54 +886,6 @@ void ApplicationVolumeRender::Update(float deltaTime)
             m_IsReloadTransferFunc = false;
         }
 
-        if (m_IsVolumeDataLoaded)
-        {
-            // 读取tif数据
-            std::vector<uint16_t> intensity;
-            int width, height, depth;
-
-            if (LoadVolumeDataFromTiff(m_VolumeDataPath, intensity, width, height, depth))
-            {
-                // 计算Histogram
-                auto histogram = GetHistogram(intensity);
-
-                // 计算最小值和最大值
-                uint16_t min, max;
-                GetMinMaxOfHistogram(histogram, min, max);
-                std::cout << "min: " << min << " max: " << max << std::endl;
-
-                // 计算CDF
-                auto cdf = GetCDF(histogram);
-
-                // 计算CDF的百分之5和百分之95，作为最小值和最大值
-                auto p5 = EvaluateIntensityOfPercentile(cdf, 0.05f);
-                auto p95 = EvaluateIntensityOfPercentile(cdf, 0.95f);
-
-                std::cout << "p5: " << p5 << " p95: " << p95 << std::endl;
-
-                // 依据p5和p95的值，重新映射强度值
-                for (auto &e : intensity)
-                {
-                    double intensityNorm = (e - p5) / (p95 - p5);
-                    intensityNorm = (std::clamp)(intensityNorm, 0.0, 1.0);
-                    e = static_cast<uint16_t>(intensityNorm * std::numeric_limits<uint16_t>::max());
-                }
-
-                try
-                {
-                    UpdateVolumeTexture(intensity, width, height, depth);
-                }
-                catch (std::exception const &e)
-                {
-                    std::cout << "update volume data error " << e.what() << std::endl;
-                }
-
-                m_IsFirstFrameAfterVolumeDataLoad = true;
-                m_IsVolumeDataLoaded = false;
-                m_FrameIndex = 0;
-            }
-        }
-
         if (m_IsRecreateOpacityTexture) // 更新透明度映射表
         {
             m_pSRVOpacityTF = m_OpacityTransferFunc.GenerateTexture(m_pDevice, m_SamplingCount);
@@ -1049,7 +912,7 @@ void ApplicationVolumeRender::Update(float deltaTime)
         std::cout << e.what() << std::endl;
     }
 
-    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 1.5f * m_DimensionZ}; //  实际物体的尺寸，通常z的间距要比XY的像素间距要大，当然要根据具体的扫描间距来
+    Hawk::Math::Vec3 scaleVector = {0.488f * m_DimensionX, 0.488f * m_DimensionY, 0.7f * m_DimensionZ}; //  实际物体的尺寸，通常z的间距要比XY的像素间距要大，当然要根据具体的扫描间距来
 
     double maxDim = (std::max)({scaleVector.x, scaleVector.y, scaleVector.z});
     double gridSpacing = maxDim / 12.0;

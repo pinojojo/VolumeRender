@@ -491,9 +491,9 @@ void Application::InitializeImGUI()
     ImGui::CreateContext();
     ImPlot::CreateContext();
 
-    const auto &io = ImGui::GetIO();
-    io.Fonts->AddFontFromFileTTF("content/Fonts/Roboto-Medium.ttf", 16.0f);
-    ImPlot::GetStyle().AntiAliasedLines = true;
+    // const auto &io = ImGui::GetIO();
+    // io.Fonts->AddFontFromFileTTF("content/Fonts/Roboto-Medium.ttf", 16.0f);
+    // ImPlot::GetStyle().AntiAliasedLines = true;
     ImGui::StyleColorsDark();
 
     ImGui_ImplDX11_Init(m_pDevice.Get(), m_pImmediateContext.Get());
