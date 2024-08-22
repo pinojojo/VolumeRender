@@ -241,6 +241,70 @@ void Application::Run()
     this->WaitForGPU();
 }
 
+// API测试用的
+auto Application::Run(int loopCount) -> void
+{
+    int count = 0;
+    while (count < loopCount)
+    {
+        std::cout << "Running " << count << std::endl;
+        glfwPollEvents();
+
+        this->Update(this->CalculateFrameTime());
+
+        ImGui_ImplDX11_NewFrame();
+
+        ImGui_ImplGlfw_NewFrame();
+
+        ImGui::NewFrame();
+
+        const uint32_t frameIndex = m_pSwapChain->GetCurrentBackBufferIndex();
+
+        // 两个调用确保 dummy 资源在 Direct3D 11 和 Direct3D 12 之间正确同步
+        m_pD3D11On12Device->AcquireWrappedResources(m_pD3D11BackBuffersDummy[frameIndex].GetAddressOf(), 1);
+        m_pD3D11On12Device->ReleaseWrappedResources(m_pD3D11BackBuffersDummy[frameIndex].GetAddressOf(), 1);
+
+        // 获取non-dummy资源, 用于渲染
+        m_pD3D11On12Device->AcquireWrappedResources(m_pD3D11BackBuffers[frameIndex].GetAddressOf(), 1);
+        this->RenderFrame(m_pRTV[frameIndex]);
+
+        { // 保存到本地
+
+            static uint32_t frameCounter = 0;
+            std::string fileName = fmt::format("content/Render{}.png", frameCounter);
+
+            SaveRenderTargetToPNG(m_pDevice.Get(),
+                                  m_pImmediateContext.Get(),
+                                  m_pRTV[frameIndex].Get(), fileName.c_str());
+            frameCounter++;
+        }
+
+        this->RenderGUI(m_pRTV[frameIndex]);
+        ImGui::Render();
+
+        m_pAnnotation->BeginEvent(L"Render pass: ImGui");
+        m_pImmediateContext->OMSetRenderTargets(1, m_pRTV[frameIndex].GetAddressOf(), nullptr);
+        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        m_pImmediateContext->OMSetRenderTargets(0, nullptr, nullptr);
+        m_pAnnotation->EndEvent();
+        m_pD3D11On12Device->ReleaseWrappedResources(m_pD3D11BackBuffers[frameIndex].GetAddressOf(), 1);
+        m_pImmediateContext->Flush();
+
+        m_pSwapChain->Present(m_ApplicationDesc.IsVSync ? 1 : 0, 0);
+
+        count++;
+    }
+
+    this->WaitForGPU();
+
+    std::cout << "Loop count: " << loopCount << " finised" << std::endl;
+}
+
+auto Application::GetDesc() const -> ApplicationDesc
+{
+    return m_ApplicationDesc;
+}
+
 void Application::InitializeSDL()
 {
 
@@ -249,6 +313,9 @@ void Application::InitializeSDL()
 #ifdef WINDOWLESS
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE); // 设置窗口属性为隐藏
 #endif
+
+    if (m_ApplicationDesc.IsOffscreen)
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE); // 设置窗口属性为隐藏
 
     m_pWindow = glfwCreateWindow(m_ApplicationDesc.Width, m_ApplicationDesc.Height, m_ApplicationDesc.Tittle.c_str(), nullptr, nullptr);
 }

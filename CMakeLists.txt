@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.19)
 
 project(VolumeRender CXX)
 
+set(BUILD_API ON)
+
 set(PROJECT_CONTENT "${CMAKE_CURRENT_SOURCE_DIR}/content")
 set(PROJECT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 set(PROJECT_OUTPUT_DIRECTORY "${PROJECT_DIRECTORY}/x64")
@@ -64,3 +66,50 @@ add_custom_command(TARGET VolumeRender POST_BUILD
     ${PROJECT_CONTENT}
     $<TARGET_FILE_DIR:VolumeRender>/content
 )
+
+if(BUILD_API)
+    set(API_INCLUDE
+        include/VolumeRenderAPI.h
+    )
+
+    set(API_SOURCE
+        source/Application.cpp
+        source/ApplicationVolumeRender.cpp
+        source/VolumeRenderAPI.cpp
+    )
+
+    add_library(VolumeRenderAPI SHARED ${API_INCLUDE} ${API_SOURCE} ${SHADERS})
+
+    target_link_libraries(VolumeRenderAPI PRIVATE fmt glfw imgui implot nlohmann_json directx-tex d3d11.lib d3d12.lib dxgi.lib d3dcompiler.lib)
+    target_link_libraries(VolumeRenderAPI PRIVATE ${OpenCV_LIBS})
+
+    target_include_directories(VolumeRenderAPI PRIVATE "include")
+
+    set_target_properties(VolumeRenderAPI PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_DIRECTORY}")
+    set_source_files_properties(${SHADERS} PROPERTIES VS_TOOL_OVERRIDE "None")
+
+    set(PROJECT_CONTENT "${CMAKE_CURRENT_SOURCE_DIR}/content")
+
+    # 将content目录复制到输出目录
+    add_custom_command(TARGET VolumeRenderAPI POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${PROJECT_CONTENT}
+        $<TARGET_FILE_DIR:VolumeRenderAPI>/content
+    )
+
+    # 接下来是 一个exe，用于测试这个api
+    set(API_TEST_INCLUDE
+        include/VolumeRenderAPI.h
+    )
+
+    set(API_TEST_SOURCE
+        source/VolumeRenderAPITest.cpp
+    )
+
+    add_executable(VolumeRenderAPITest ${API_TEST_INCLUDE} ${API_TEST_SOURCE})
+
+    target_include_directories(VolumeRenderAPITest PRIVATE "include")
+
+    # 链接到dll
+    target_link_libraries(VolumeRenderAPITest PRIVATE VolumeRenderAPI)
+endif()

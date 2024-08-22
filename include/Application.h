@@ -33,6 +33,7 @@ struct ApplicationDesc
     uint32_t Height = 600;
     bool IsFullScreen = false;
     bool IsVSync = true;
+    bool IsOffscreen = false;
 };
 
 struct GLFWwindow;
@@ -88,6 +89,10 @@ public:
     virtual void RenderGUI(DX::ComPtr<ID3D11RenderTargetView> pRTV) = 0;
 
     auto Run() -> void;
+
+    auto Run(int loopCount) -> void;
+
+    auto GetDesc() const -> ApplicationDesc;
 
 private:
     void InitializeSDL();
