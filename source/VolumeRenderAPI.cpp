@@ -18,6 +18,7 @@ void *Init()
 
     appDesc.Tittle = std::string("Volume Render ") + std::to_string(g_instanceCount++);
     appDesc.IsFullScreen = false;
+    appDesc.IsVSync = false;
     appDesc.IsOffscreen = true;
 
     ApplicationVolumeRender *app = new ApplicationVolumeRender(appDesc);
@@ -48,6 +49,23 @@ const char *Status()
     return j.dump().c_str();
 }
 
+void Retrieve(void *buffer, int width, int height)
+{
+    if (g_instanceMap.empty() || width <= 0 || height <= 0)
+    {
+        return;
+    }
+
+    auto desc = g_instanceMap.begin()->second->GetDesc();
+
+    if (desc.Width != width || desc.Height != height)
+    {
+        g_instanceMap.begin()->second->Resize(width, height);
+    }
+
+    g_instanceMap.begin()->second->Run(1, buffer);
+}
+
 void List()
 {
     for (auto const &instance : g_instanceMap)
@@ -58,14 +76,21 @@ void List()
 
 int Render(int w, int h)
 {
-    if (g_instanceMap.empty())
+    if (g_instanceMap.empty() || w <= 0 || h <= 0)
     {
-        return -1;
+        return VOLUME_RENDER_INVALID_PARAMETER;
+    }
+
+    auto desc = g_instanceMap.begin()->second->GetDesc();
+
+    if (desc.Width != w || desc.Height != h)
+    {
+        g_instanceMap.begin()->second->Resize(w, h);
     }
 
     g_instanceMap.begin()->second->Run(5);
 
-    return 0;
+    return VOLUME_RENDER_SUCCESS;
 }
 
 int Cleanup(void *instance)

@@ -34,6 +34,7 @@
 #include <wincodec.h> // WIC的头文件，用于保存图片
 
 #include <vector>
+#include "Utility.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
@@ -131,7 +132,11 @@ void Application::Resize(int32_t width, int32_t height)
     m_ApplicationDesc.Height = height;
 }
 
-void SaveRenderTargetToPNG(ID3D11Device *m_pDevice, ID3D11DeviceContext *m_pImmediateContext, ID3D11RenderTargetView *m_pRTV, const char *filename)
+// 获取RTV的数据到内存
+void GetRenderResult(ID3D11Device *m_pDevice,
+                     ID3D11DeviceContext *m_pImmediateContext,
+                     ID3D11RenderTargetView *m_pRTV,
+                     void *dst)
 {
     // 获取当前的渲染目标视图
     ID3D11Texture2D *pRenderTarget = nullptr;
@@ -148,10 +153,12 @@ void SaveRenderTargetToPNG(ID3D11Device *m_pDevice, ID3D11DeviceContext *m_pImme
     ID3D11Texture2D *pStagingTexture = nullptr;
     m_pDevice->CreateTexture2D(&desc, nullptr, &pStagingTexture);
 
+    // 打印纹理尺寸
+
     // 将渲染目标的内容复制到临时纹理
     m_pImmediateContext->CopyResource(pStagingTexture, pRenderTarget);
 
-    // 映射临时纹理以读取数据
+    // 映射临时纹理以获取
     D3D11_MAPPED_SUBRESOURCE mappedResource;
     m_pImmediateContext->Map(pStagingTexture, 0, D3D11_MAP_READ, 0, &mappedResource);
 
@@ -160,15 +167,21 @@ void SaveRenderTargetToPNG(ID3D11Device *m_pDevice, ID3D11DeviceContext *m_pImme
     UINT rowPitch = mappedResource.RowPitch;
     UINT imageSize = rowPitch * desc.Height;
 
-    // 创建一个缓冲区来存储图像数据
-    std::vector<BYTE> imageData(imageSize);
-    memcpy(imageData.data(), pData, imageSize);
+    utils::LogToFile(fmt::format("GetRenderResult: App size = {}x{} rowPitch = {} imageSize = {}", desc.Width, desc.Height, rowPitch, imageSize));
+
+    if (dst)
+    {
+        // 考虑DX内部做了行填充，所以需要逐行拷贝
+        for (UINT row = 0; row < desc.Height; ++row)
+        {
+            BYTE *pSrcRow = pData + row * rowPitch;
+            BYTE *pDstRow = reinterpret_cast<BYTE *>(dst) + row * desc.Width * 4;
+            std::memcpy(pDstRow, pSrcRow, desc.Width * 4);
+        }
+    }
 
     // 解除映射
     m_pImmediateContext->Unmap(pStagingTexture, 0);
-
-    // 保存为 PNG 图像
-    stbi_write_png(filename, desc.Width, desc.Height, 4, imageData.data(), rowPitch);
 
     // 释放资源
     pStagingTexture->Release();
@@ -208,22 +221,6 @@ void Application::Run()
         m_pD3D11On12Device->AcquireWrappedResources(m_pD3D11BackBuffers[frameIndex].GetAddressOf(), 1);
         this->RenderFrame(m_pRTV[frameIndex]);
 
-#ifdef WINDOWLESS
-        { // 保存到本地
-
-            static uint32_t frameCounter = 0;
-            std::cout << "frame" << frameCounter << std::endl;
-            if (frameCounter == 30)
-                SaveRenderTargetToPNG(m_pDevice.Get(),
-                                      m_pImmediateContext.Get(),
-                                      m_pRTV[frameIndex].Get(), "content/Output/Render.png");
-            frameCounter++;
-
-            if (frameCounter == 100)
-                needToExit = true;
-        }
-#endif
-
         this->RenderGUI(m_pRTV[frameIndex]);
         ImGui::Render();
 
@@ -242,12 +239,12 @@ void Application::Run()
 }
 
 // API测试用的
-auto Application::Run(int loopCount) -> void
+auto Application::Run(int loopCount, void *buffer) -> void
 {
+    utils::LogToFile(fmt::format("Run loopCount = {} , buffer address = {}", loopCount, buffer));
     int count = 0;
     while (count < loopCount)
     {
-        std::cout << "Running " << count << std::endl;
         glfwPollEvents();
 
         this->Update(this->CalculateFrameTime());
@@ -268,15 +265,9 @@ auto Application::Run(int loopCount) -> void
         m_pD3D11On12Device->AcquireWrappedResources(m_pD3D11BackBuffers[frameIndex].GetAddressOf(), 1);
         this->RenderFrame(m_pRTV[frameIndex]);
 
-        { // 保存到本地
-
-            static uint32_t frameCounter = 0;
-            std::string fileName = fmt::format("content/Render{}.png", frameCounter);
-
-            SaveRenderTargetToPNG(m_pDevice.Get(),
-                                  m_pImmediateContext.Get(),
-                                  m_pRTV[frameIndex].Get(), fileName.c_str());
-            frameCounter++;
+        if (count == loopCount - 1)
+        {
+            GetRenderResult(m_pDevice.Get(), m_pImmediateContext.Get(), m_pRTV[frameIndex].Get(), buffer);
         }
 
         this->RenderGUI(m_pRTV[frameIndex]);
@@ -297,7 +288,7 @@ auto Application::Run(int loopCount) -> void
 
     this->WaitForGPU();
 
-    std::cout << "Loop count: " << loopCount << " finised" << std::endl;
+    utils::LogToFile("Run finished.");
 }
 
 auto Application::GetDesc() const -> ApplicationDesc

@@ -90,7 +90,7 @@ public:
 
     auto Run() -> void;
 
-    auto Run(int loopCount) -> void;
+    auto Run(int loopCount, void *buffer = nullptr) -> void;
 
     auto GetDesc() const -> ApplicationDesc;
 

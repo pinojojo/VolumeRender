@@ -4,6 +4,8 @@
 #include <commdlg.h>
 #include <string>
 #include <vector>
+#include <fstream>
+#include <ctime>
 
 namespace utils
 {
@@ -39,5 +41,41 @@ namespace utils
         std::wstring wstrTo(size_needed, 0);
         MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
         return wstrTo;
+    }
+
+    inline void LogToFile(const std::string &message)
+    {
+        // 获取当前日期
+        time_t now = time(0);
+        tm *localTime = localtime(&now);
+
+        char fileName[100];
+        strftime(fileName, sizeof(fileName), "vrlog-%Y-%m-%d.txt", localTime);
+
+        // 打开文件
+        static bool isFirstLog = true;
+        std::ofstream logFile;
+
+        if (isFirstLog)
+        {
+            // 第一次记录时清空文件
+            logFile.open(fileName, std::ios::out | std::ios::trunc);
+            isFirstLog = false;
+        }
+        else
+        {
+            // 追加写入
+            logFile.open(fileName, std::ios::out | std::ios::app);
+        }
+
+        if (logFile.is_open())
+        {
+            logFile << message << std::endl;
+            logFile.close();
+        }
+        else
+        {
+            std::cerr << "Unable to open log file: " << fileName << std::endl;
+        }
     }
 }

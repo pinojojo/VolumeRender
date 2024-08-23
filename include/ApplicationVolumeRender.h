@@ -37,6 +37,8 @@ public:
 
     ApplicationVolumeRender(ApplicationDesc const &desc);
 
+    void Resize(int32_t width, int32_t height) override;
+
 private:
     void InitializeVolumeTexture();
 
@@ -55,8 +57,6 @@ private:
     void InitializeTileBuffer();
 
     void InitializeEnvironmentMap();
-
-    void Resize(int32_t width, int32_t height) override;
 
     void EventMouseWheel(float delta) override;
 

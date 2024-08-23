@@ -2,6 +2,17 @@
 
 extern "C"
 {
+
+    enum ErrorCode
+    {
+        VOLUME_RENDER_SUCCESS = 0,
+        VOLUME_RENDER_INVALID_INSTANCE = 1,
+        VOLUME_RENDER_INVALID_PARAMETER = 2,
+        VOLUME_RENDER_INSTANCE_NOT_FOUND = 3,
+        VOLUME_RENDER_RENDER_FAILED = 4,
+        // 其他错误码...
+    };
+
     /**
      * @brief 初始化一个VolumeRender实例
      *
@@ -15,6 +26,12 @@ extern "C"
      *
      */
     __declspec(dllexport) const char *Status();
+
+    /**
+     * @brief
+     *
+     */
+    __declspec(dllexport) void Retrieve(void *buffer, int width, int height);
 
     __declspec(dllexport) void List();
 
